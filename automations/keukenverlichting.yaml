@@ -1,0 +1,74 @@
+- id: keukenverlichting_beweging_seizoenen
+  alias: Keukenverlichting op beweging met seizoenen
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.bewegingssensor_beweging
+      to: "on"
+
+  condition:
+    - condition: or
+      conditions:
+        # ZOMER: 21 maart t/m 21 oktober → actief tussen zonsondergang en zonsopgang
+        - condition: and
+          conditions:
+            # Zomerperiode
+            - condition: template
+              value_template: >
+                {% set m = now().month %}
+                {% set d = now().day %}
+                {{ (m > 3 and m < 10) or
+                   (m == 3 and d >= 21) or
+                   (m == 10 and d <= 21) }}
+            # Nacht: na zonsondergang OF vóór zonsopgang
+            - condition: or
+              conditions:
+                - condition: sun
+                  after: sunset
+                - condition: sun
+                  before: sunrise
+        # WINTER: rest van het jaar → actief van 1 uur vóór zonsondergang tot 1 uur ná zonsopgang
+        - condition: and
+          conditions:
+            # Winterperiode = niet-zomer
+            - condition: template
+              value_template: >
+                {% set m = now().month %}
+                {% set d = now().day %}
+                {{ not ((m > 3 and m < 10) or
+                        (m == 3 and d >= 21) or
+                        (m == 10 and d <= 21)) }}
+            # 1u vóór zonsondergang OF 1u ná zonsopgang
+            - condition: or
+              conditions:
+                - condition: sun
+                  after: sunset
+                  after_offset: "-01:00:00"
+                - condition: sun
+                  before: sunrise
+                  before_offset: "01:00:00"
+
+  action:
+    # 1) Altijd zichtbaar (belletje rechtsboven)
+    #- service: persistent_notification.create
+    #  data:
+    #    title: "keukenverlichting"
+    #    message: "lampie aan"
+        
+    # Lamp aan bij beweging
+    - service: switch.turn_on
+      target:
+        entity_id: switch.keukenverlichting      # pas aan
+
+    # Wachten tot 10 minuten na laatste 'geen beweging'
+    - wait_for_trigger:
+        - platform: state
+          entity_id: binary_sensor.bewegingssensor_beweging
+          to: "off"
+          for: "00:10:00"
+
+    # Daarna lamp uit
+    - service: switch.turn_off
+      target:
+        entity_id: switch.keukenverlichting
+
+  mode: restart

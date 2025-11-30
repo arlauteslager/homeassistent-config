@@ -1,0 +1,76 @@
+- alias: Halverlichting aan bij beweging en voordeur opening
+  id: halverlichting_aan_bij_beweging_en_voordeur_opening
+
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.sensor_hal
+      to: "on"
+
+    - platform: state
+      entity_id: binary_sensor.voordeur
+      to: "on"
+
+  condition:
+    - condition: numeric_state
+      entity_id: sensor.sensor_hal_licht
+      below: 50
+
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.verlichting_hal
+
+- alias: voordeur lamp aan bij voordeur opening en beweging
+  id: lamp_voordeur_aan_bij_beweging_en_voordeur_opening
+
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.sensor_hal
+      to: "on"
+
+    - platform: state
+      entity_id: binary_sensor.voordeur
+      to: "on"
+
+  condition:
+    - condition: numeric_state
+      entity_id: sensor.sensor_hal_licht
+      below: 50
+
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.lamp_voordeur
+
+- alias: Halverlichting uit na geen beweging
+  id: halverlichting_uit_na_geen_beweging
+
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.sensor_hal
+      to: "off"
+      for: "00:05:00"
+
+  action:
+    - service: light.turn_off
+      target:
+        entity_id: light.verlichting_hal
+
+- alias: lamp voordeur uit na geen beweging
+  id: lamp_voordeur_uit_na_geen_beweging
+
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.sensor_hal
+      to: "off"
+      for: "00:03:00"
+
+    - platform: state
+      entity_id: binary_sensor.voordeur
+      to: "off"
+      for: "00:03:00"
+
+  action:
+    - service: light.turn_off
+      target:
+        entity_id: light.lamp_voordeur

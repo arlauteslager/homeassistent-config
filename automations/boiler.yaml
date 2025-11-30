@@ -1,0 +1,189 @@
+- alias: Boiler timer reset dagelijks
+  trigger:
+    - platform: time
+      at: "06:00:00"
+#      at: "17:32:00"
+  action:
+    - service: switch.turn_off
+      target:
+        entity_id: switch.boiler_stopcontact_1
+    - delay: "00:00:02"
+    - service: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.boiler_al_verwarmd
+    - service: timer.start
+      data:
+        entity_id: timer.boiler_opwarmtijd
+        duration: "00:30:00"
+    - delay: "00:00:01"
+    - service: timer.pause
+      target:
+        entity_id: timer.boiler_opwarmtijd
+    - service: logbook.log
+      data:
+        name: Boiler
+        message: >
+          Timer gereset naar 30:00 en op pauze gezet,
+          #Timerstatus: {{ states('timer.boiler_opwarmtijd') }},
+          #resterend: {{ state_attr('timer.boiler_opwarmtijd', 'remaining') }}
+  mode: single
+
+- alias: Boiler aan bij teruglevering
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.p1_meter_power
+      below: -1300
+  condition:
+    - condition: state
+      entity_id: input_boolean.boiler_al_verwarmd
+      state: 'off'
+    - condition: state
+      entity_id: switch.boiler_stopcontact_1
+      state: 'off'
+  action:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: timer.boiler_opwarmtijd
+              state: "paused"
+          sequence:
+            - service: switch.turn_on
+              target:
+                 entity_id: switch.boiler_stopcontact_1
+            - service: timer.start
+              target:
+                entity_id: timer.boiler_opwarmtijd
+            - service: logbook.log
+              data:
+                name: boiler
+                message: >
+                  Boiler AAN bij teruglevering:, 
+                  #Timerstatus: {{ states('timer.boiler_opwarmtijd') }},
+                  #resterend: {{ states('sensor.boiler_opwarmtijd_resterend') }},
+        - conditions:
+            - condition: state
+              entity_id: timer.boiler_opwarmtijd
+              state: "idle"
+          sequence:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.boiler_al_verwarmd
+            - service: logbook.log
+              data:
+                name: Boiler opgewarmd constatering bij aanschakelen
+                message: >
+                  Dagelijkse opwarmtijd verbruikt, boiler niet aangezet !!!!!!!!!!!!!!!!!!!,
+  mode: single
+
+- alias: Boiler uit bij geen teruglevering
+  description: 'Stekker uit bij levering > 100, met vertraging'
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.p1_meter_power
+      above: 1000
+  condition:
+    - condition: state
+      entity_id: switch.boiler_stopcontact_1
+      state: 'on' # De automatisering triggert alleen als de schakelaar aan staat
+    - condition: time
+      before: "16:00:00"
+  action:
+    - choose:
+        # Optie 1: Timer is 'idle' (boiler is al opgewarmd)
+        - conditions:
+            - condition: time
+              before: "16:00:00"
+              after: "16:30:00"
+            - condition: state
+              entity_id: timer.boiler_opwarmtijd
+              state: "idle"
+          sequence:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.boiler_al_verwarmd # Markeer de boiler als verwarmd
+            - service: logbook.log
+              data:
+                name: Boiler
+                message: >
+                  Boiler was al opgewarmd (timer idle), schakelaar wordt nu uitgeschakeld.
+        # Optie 2: Timer is 'active' (boiler is nog bezig met opwarmen)
+        - conditions:
+            - condition: state
+              entity_id: timer.boiler_opwarmtijd
+              state: "active"
+          sequence:
+            - service: timer.pause
+              target:
+                entity_id: timer.boiler_opwarmtijd # Pauzeer de timer
+            - service: logbook.log
+              data:
+                name: Boiler
+                message: >
+                  Boiler UIT bij geen teruglevering (timer actief):
+        # Optie 3: Timer is 'paused' (boiler was gepauzeerd, maar de schakelaar stond aan - onwaarschijnlijk, maar voor de zekerheid)
+        - conditions:
+            - condition: state
+              entity_id: timer.boiler_opwarmtijd
+              state: "paused"
+          sequence:
+            - service: logbook.log
+              data:
+                name: Boiler 
+                message: >
+                  HELP, ONMOGELIJK, DE BOILER STOND AAN TERWIJL DE TIMER OP PAUZED STOND Boiler UIT bij geen teruglevering (timer gepauzeerd):
+    # Deze actie wordt ALTIJD uitgevoerd nadat de 'choose' is afgehandeld,
+    # om te garanderen dat de schakelaar uit is als deze aan stond bij de trigger.
+    - service: switch.turn_off
+      target:
+        entity_id: switch.boiler_stopcontact_1
+    - service: logbook.log
+      data:
+        name: Boiler
+        message: >
+          Boiler UIT-schakelactie voltooid. Definitieve status stopcontact: {{ states('switch.kachel_beneden_stopcontact_1') }}
+  mode: single
+
+- alias: Timer.finished event
+  trigger:
+    - platform: event
+      event_type: timer.finished
+      event_data:
+        entity_id: timer.boiler_opwarmtijd
+  action:
+    - service: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.boiler_al_verwarmd
+    - service: switch.turn_off
+      target:
+        entity_id: switch.boiler_stopcontact_1
+    - service: logbook.log
+      data:
+        name: opwarmtijd voltooid timer finishedd
+        message: >
+          Timer Boiler opwarmtijd finished
+          
+- alias: Boiler verwarmen op wo-zo om 16:00 bij actieve timer
+  trigger:
+    - platform: time
+      at: "16:00:00"
+  condition:
+    - condition: time
+      weekday:
+        - wed
+        - thu
+        - fri
+        - sat
+        - sun
+ #   - condition: template
+ #     value_template: >
+ #       {{ not is_state('timer.boiler_opwarmtijd', 'idle') }}
+  action:
+    - service: switch.turn_on  # Pas dit aan naar jouw boiler-service
+      target:
+        entity_id: switch.boiler_stopcontact_1
+    - delay: "00:15:00"
+    - service: switch.turn_off
+      target:
+        entity_id: switch.boiler_stopcontact_1
+  mode: single
+

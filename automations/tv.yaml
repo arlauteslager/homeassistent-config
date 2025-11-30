@@ -1,0 +1,82 @@
+- id: 'switch_off_daily_0015_except_jan1'
+  alias: Switch uit om 00:15 (behalve op 1 januari)
+  trigger:
+    - platform: time
+      at: '00:25:00'
+  condition:
+    # Uitzondering: voer niet uit op 1 januari
+    - condition: template
+      value_template: "{{ now().strftime('%m-%d') != '01-01' }}"
+  action:
+    - service: switch.turn_off
+      target:
+        entity_id: switch.tv_stopcontact_1   # ← vervang door jouw switch
+    - service: logbook.log
+      data:
+        name: "Automatisch schema"
+        message: "tv stopcontact uitgeschakeld om {{ now() }}"
+  mode: single
+
+- id: 'tv_on_motion_in_time_windows'
+  alias: TV-stopcontact aan bij beweging binnen tijdsvensters
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.bewegingssensor_beweging
+      to: 'on'
+  condition:
+    - condition: or
+      conditions:
+        # Zaterdag 07:00–12:00
+        - condition: and
+          conditions:
+            - condition: time
+              weekday:
+                - sat
+              after: '07:00:00'
+              before: '12:00:00'
+        # Zondag 07:00–11:00
+        - condition: and
+          conditions:
+            - condition: time
+              weekday:
+                - sun
+              after: '07:00:00'
+              before: '11:00:00'
+        # Donderdag 12:00–18:00
+        - condition: and
+          conditions:
+            - condition: time
+              weekday:
+                - thu
+              after: '12:00:00'
+              before: '18:00:00'
+        # Vrijdag 13:00–17:00
+        - condition: and
+          conditions:
+            - condition: time
+              weekday:
+                - fri
+              after: '13:00:00'
+              before: '17:00:00'
+  action:
+    # Zet alleen aan als hij echt uit is
+    - condition: state
+      entity_id: switch.tv_stopcontact_1
+      state: 'off'
+    - service: switch.turn_on
+      target:
+        entity_id: switch.tv_stopcontact_1
+    # 1) Altijd zichtbaar (belletje rechtsboven)
+    #- service: persistent_notification.create
+    #  data:
+    #    title: "TEST tv"
+    #    message: "Aangezet door beweging  ({{ now() }})"
+
+    # (optioneel) logje in Logboek
+    - service: logbook.log
+      data:
+        name: "TV-stopcontact"
+        message: "Aangezet door beweging binnen venster ({{ now() }})"
+        
+  mode: single
+  

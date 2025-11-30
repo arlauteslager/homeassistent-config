@@ -1,0 +1,176 @@
+
+# Loads default set of integrations. Do not remove.
+default_config:
+
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+
+# ✅ laad álle automations uit de map 'automations/'
+automation: !include_dir_merge_list automations/
+script: !include_dir_merge_list scripts/
+scene: !include scenes.yaml
+#test: !include test.yaml
+
+input_boolean:
+  boiler_al_verwarmd:
+    name: Boiler al verwarmd vandaag
+    initial: false
+
+timer:
+  boiler_opwarmtijd:
+    duration: '00:30:00'
+  test_joepie:
+    duration: '00:00:10'
+
+sensor:
+  - platform: rest
+    name: nederlandse_mop
+    # Let op: sommige documentatie gebruikt .php, niet .html
+    resource: "http://api.apekool.nl/services/jokes/getjoke.php?type=nl"
+    method: GET
+    scan_interval: 9999999999
+    value_template: >-
+      {% if value_json is defined and value_json.joke is defined %}
+        {{ value_json.joke }}
+      {% else %}
+        Geen mop beschikbaar.
+      {% endif %}
+
+  # 2. EverXP – categorie 'Woman' (Marjolein)
+  - platform: rest
+    name: everxp_woman_quote
+    # vul hier je echte API-key in i.p.v. JOUW_API_KEY_HIER
+    resource: "https://api.everxp.com/heading/quote?api_key=dG5qZDZ2dGUwOA==&quote=Woman&lang=en"
+    method: GET
+    scan_interval: 999999999
+    value_template: "{{ value_json.heading }}"
+    headers:
+      User-Agent: HomeAssistant
+
+  # 3. ZenQuotes – random quote (Arnaud)
+  - platform: rest
+    name: zen_quote
+    resource: "https://zenquotes.io/api/random"
+    method: GET
+    scan_interval: 999999999
+    value_template: "{{ value_json[0].q }} — {{ value_json[0].a }}"
+    headers:
+      User-Agent: HomeAssistant
+      
+  - platform: rest
+    name: knmi_data_utrecht
+    resource: "https://data.buienradar.nl/2.0/feed/json"
+    method: GET
+    scan_interval: 9999999999
+    value_template: "ok"
+    json_attributes:
+      - actual
+      - forecast
+
+  - platform: history_stats
+    name: Boiler actief vandaag
+    entity_id: switch.kachel_beneden_stopcontact_1
+    state: "on"
+    type: time
+    start: "{{ now().replace(hour=0, minute=0, second=0) }}"
+    end: "{{ now() }}"
+
+template:
+  - sensor:
+      - name: Boiler Opwarmtijd Resterend
+        unique_id: boiler_opwarmtijd_resterend
+        unit_of_measurement: "hh:mm:ss"
+        icon: mdi:timer
+        
+        # Dit deel bepaalt of de sensor überhaupt een waarde heeft (Beschikbaarheid)
+        availability: >
+          {{ state_attr('timer.boiler_opwarmtijd', 'finishes_at') is not none }}
+
+        # Dit deel berekent de waarde ALLEEN als de sensor beschikbaar is
+        state: >
+          {% set finish_time = state_attr('timer.boiler_opwarmtijd', 'finishes_at') %}
+          {% set time_left = (as_timestamp(finish_time) - as_timestamp(now())) | int %}
+          {% if time_left > 0 %}
+            {{ time_left | timestamp_custom('%H:%M:%S', true) }}
+          {% else %}
+            00:00:00
+          {% endif %}
+
+  - sensor:
+      - name: "knmi_weerbericht_utrecht"
+        state: "ready"
+        attributes:
+          full_text: >-
+            {% set actual = state_attr('sensor.knmi_data_utrecht', 'actual') %}
+            {% set forecast = state_attr('sensor.knmi_data_utrecht', 'forecast') %}
+            {% if actual is not none and actual.stationmeasurements is defined %}
+              {% set stations = actual.stationmeasurements %}
+              {% set debilt_list = stations
+                  | selectattr('stationid', 'equalto', 6260)
+                  | list %}
+              {% if debilt_list | length > 0 %}
+                {% set s = debilt_list[0] %}
+
+                {% set temp     = s.temperature        | float(0) %}
+                {% set feel     = s.feeltemperature    | float(0) %}
+                {% set winddir  = s.winddirection      | default('onbekende richting') %}
+                {% set bft      = s.windspeedBft       | default('?') %}
+                {% set desc     = s.weatherdescription | default('') %}
+                {% set precip   = s.precipitation      | float(0) %}
+                {% set rain1h   = s.rainFallLastHour   | float(0) %}
+                {% set rain24h  = s.rainFallLast24Hour | float(0) %}
+
+                {%- set now_rain_sentence -%}
+                  {%- if precip > 0 -%}
+                    Op dit moment valt er neerslag, ongeveer {{ '%.1f'|format(precip) }} millimeter per uur.
+                  {%- else -%}
+                    Op dit moment is het droog.
+                  {%- endif -%}
+                {%- endset -%}
+
+                {%- set history_sentence -%}
+                  {%- if rain1h > 0 and rain24h > 0 -%}
+                    In het afgelopen uur is er {{ '%.1f'|format(rain1h) }} millimeter gevallen
+                    en in de afgelopen 24 uur in totaal {{ '%.1f'|format(rain24h) }} millimeter.
+                  {%- elif rain24h > 0 -%}
+                    In de afgelopen 24 uur is er {{ '%.1f'|format(rain24h) }} millimeter gevallen.
+                  {%- else -%}
+                    Er is de afgelopen 24 uur nauwelijks neerslag gevallen.
+                  {%- endif -%}
+                {%- endset -%}
+
+                {%- set forecast_sentence -%}
+                  {%- if forecast is not none
+                        and forecast.fivedayforecast is defined
+                        and (forecast.fivedayforecast | length) > 0 -%}
+                    {%- set today_fc = forecast.fivedayforecast[0] -%}
+                    {%- set rainChance = today_fc.rainChance   | default(0) -%}
+                    {%- set mmMin      = today_fc.mmRainMin    | default(0) -%}
+                    {%- set mmMax      = today_fc.mmRainMax    | default(0) -%}
+                    {%- if rainChance|int > 0 -%}
+                      De kans op regen vandaag is ongeveer {{ rainChance }} procent,
+                      met tussen {{ mmMin }} en {{ mmMax }} millimeter neerslag verwacht.
+                    {%- else -%}
+                      Voor vandaag wordt weinig neerslag verwacht.
+                    {%- endif -%}
+                  {%- endif -%}
+                {%- endset -%}
+
+                Het is nu {{ temp|round(1) }} graden in regio Utrecht,
+                met een gevoelstemperatuur van {{ feel|round(1) }} graden.
+                De wind komt uit het {{ winddir }} en heeft een kracht van {{ bft }} Beaufort.
+                {{ desc|capitalize }}.
+                {{ now_rain_sentence }}
+                {{ history_sentence }}
+                {{ forecast_sentence }}
+              {% else %}
+                Geen weergegevens gevonden voor De Bilt.
+              {% endif %}
+            {% else %}
+              Het weerbericht voor Utrecht is momenteel niet beschikbaar.
+            {% endif %}
+tts:
+  - platform: google_translate
+    language: 'nl'
+    cache: true

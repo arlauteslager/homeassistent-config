@@ -1,0 +1,42 @@
+# Home Assistant database & logs
+home-assistant_v2.db
+home-assistant_v2.db-shm
+home-assistant_v2.db-wal
+home-assistant.log
+home-assistant.log.*
+home-assistant.log.fault
+home-assistant.log.old
+
+# Zigbee / andere db's
+zigbee.db
+zigbee.db-shm
+zigbee.db-wal
+
+# Home Assistant intern
+.storage/
+.cloud/
+deps/
+tts/
+backup/
+
+# HACS frontend build (groooote meuk, niet nodig in Git)
+ custom_components/hacs/hacs_frontend/
+#custom_components/
+
+
+# Logs / db / tmp in het algemeen
+*.log
+*.db
+*.sqlite
+*.sqlite3
+*.tmp
+
+# Secrets – nooit in Git!
+secrets.yaml
+
+# Frontend community spullen
+www/community/
+
+# Editor / tooling
+.vscode/
+.history/

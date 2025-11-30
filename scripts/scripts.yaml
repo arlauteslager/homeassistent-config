@@ -1,0 +1,135 @@
+nieuw_script:
+  sequence:
+  - type: turn_off
+    device_id: 58c35135756432e07a985e8909196e31
+    entity_id: d3c54a8f8fa868133bd7282fe2f5dd7a
+    domain: switch
+    metadata:
+      secondary: false
+  alias: Nieuw script
+  description: ''
+
+test_tts_sonos:
+  alias: Test TTS op Sonos
+  mode: single
+  sequence:
+    - variables:
+        sonos: media_player.achterkamer     # <-- pas aan
+        volume: 0.25                      # 35% volume
+        tekst: "Hallo Jinke, wat goed dat je thuis bent. Ga je gelijk aan je huiswerk? Kom op je kan het!!"
+    - service: media_player.volume_set
+      target:
+        entity_id: "{{ sonos }}"
+      data:
+        volume_level: "{{ volume }}"
+    - service: tts.google_translate_say   # gebruik tts.cloud_say als je Nabu Casa wilt
+      data:
+        entity_id: "{{ sonos }}"
+        message: "{{ tekst }}"
+
+tts_with_smart_volume:
+  alias: "TTS met slim tijdelijk volume"
+  fields:
+    player:
+      description: "Media player (Sonos)"
+    text:
+      description: "Tekst die moet worden uitgesproken"
+    volume:
+      description: "Tijdelijk volume (0.0–1.0)"
+  sequence:
+    # 1. Huidige status & volume bewaren
+    - variables:
+        old_volume: "{{ state_attr(player, 'volume_level') or 0.2 }}"
+        was_playing: "{{ is_state(player, 'playing') }}"
+        word_count: "{{ text.split() | length }}"
+        # schatting: ~2.7 woorden per seconde + 2s marge
+        speak_seconds: "{{ (word_count / 1.5) | round(0) + 2 }}"
+
+    # 4. Afwachten tot TTS klaar is
+    - choose:
+        # Als Sonos vóór TTS NIET aan het spelen was:
+        # -> wacht tot hij klaar is met afspelen (state wordt geen 'playing' meer)
+        - conditions: "{{ not was_playing }}"
+          sequence:
+
+            # 2. Volume tijdelijk verhogen
+            - service: media_player.volume_set
+              target:
+                entity_id: "{{ player }}"
+              data:
+                volume_level: "{{ volume }}"
+
+            # 3. TTS afspelen
+            - service: tts.google_translate_say
+              data:
+                entity_id: "{{ player }}"
+                message: "{{ text }}"
+
+            # gewoon wachten op basis van lengte van de tekst
+            - delay:
+                seconds: "{{ speak_seconds }}"
+
+           # 5. Volume herstellen
+            - service: media_player.volume_set
+              target:
+                entity_id: "{{ player }}"
+              data:
+                volume_level: "{{ old_volume }}"
+
+        # Als Sonos al aan het spelen was:
+        # -> muziek loopt door, state blijft 'playing'
+        #    daarom: alleen op duur schatten
+        - conditions: "{{ was_playing }}"
+          sequence:
+
+            # 3. TTS afspelen
+            - service: tts.google_translate_say
+              data:
+                entity_id: "{{ player }}"
+                message: "{{ text }}"
+ 
+tts_now:
+  alias: "TTS met tijdelijk volume"
+  fields:
+    player:
+      description: "Welke media player"
+    text:
+      description: "De tekst die afgespeeld moet worden"
+    volume:
+      description: "Tijdelijk volume"
+  sequence:
+    # volume opslaan
+    - variables:
+        old_volume: "{{ state_attr(player, 'volume_level') }}"
+
+    # TTS afspelen
+    - service: tts.google_translate_say
+      data:
+        entity_id: "{{ player }}"
+        message: "{{ text }}"
+
+    # 4a. Eerst even wachten tot hij echt gaat spelen (kan paar seconden duren)
+    - wait_template: >
+        {{ is_state(player, 'playing') }}
+      timeout: "00:00:10"
+      continue_on_timeout: true
+
+    # volume instellen
+    - service: media_player.volume_set
+      target:
+        entity_id: "{{ player }}"
+      data:
+        volume_level: "{{ volume }}"
+
+    # 4b. Daarna wachten tot hij klaar is met afspelen
+    - wait_template: >
+        {{ not is_state(player, 'playing') }}
+      timeout: "00:01:00"
+      continue_on_timeout: true
+
+    # volume terugzetten
+    - service: media_player.volume_set
+      target:
+        entity_id: "{{ player }}"
+      data:
+        volume_level: "{{ old_volume }}"

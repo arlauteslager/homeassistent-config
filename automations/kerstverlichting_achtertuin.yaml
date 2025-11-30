@@ -1,0 +1,52 @@
+- id: kerstverlichting_op_schedule
+  alias: Kerstverlichting op schedule (alleen begin/einde tijdvak)
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: schedule.kerstverlichting_schema
+      to: "on"
+    - platform: state
+      entity_id: schedule.kerstverlichting_schema
+      to: "off"
+
+  action:
+    - choose:
+        # Schema staat AAN → lamp AAN
+        - conditions: "{{ is_state('schedule.kerstverlichting_schema', 'on') }}"
+          sequence:
+            - service: light.turn_on
+              target:
+                entity_id: light.kerstverlichting
+      # Schema staat UIT → lamp UIT
+      default:
+        - service: light.turn_off
+          target:
+            entity_id: light.kerstverlichting
+
+  
+- id: kerstverlichting_op_achterdeur
+  alias: Kerstverlichting op achterdeur
+  mode: restart
+
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.contact_sensor_deur
+      to: "on"
+
+  # Alleen inschakelen als de zon onder is
+  condition:
+    - condition: state
+      entity_id: sun.sun
+      state: "below_horizon"
+
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.kerstverlichting
+
+    - delay: "00:05:00"
+
+    - service: light.turn_off
+      target:
+        entity_id: light.kerstverlichting
+

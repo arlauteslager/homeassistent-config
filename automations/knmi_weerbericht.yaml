@@ -1,0 +1,75 @@
+- id: lees_knmi_weerbericht_utrecht_op_dagen
+  alias: Lees KNMI weerbericht Utrecht op vaste tijden
+  trigger:
+    # Donderdag & vrijdag om 07:25
+    - platform: time
+      at: "07:25:00"
+    # Zaterdag & zondag om 10:00
+    - platform: time
+      at: "10:39:00"
+
+  condition:
+    - condition: or
+      conditions:
+        # Donderdag en vrijdag om 07:25
+        - condition: and
+          conditions:
+            - condition: time
+              weekday:
+                - mon
+                - tue
+                - wed
+                - thu
+                - fri
+            - condition: template
+              value_template: >
+                {{ now().strftime('%H:%M') == '07:25' }}
+
+        # Zaterdag en zondag om 10:00
+        - condition: and
+          conditions:
+            - condition: time
+              weekday:
+                - sat
+                - sun
+            - condition: template
+              value_template: >
+                {{ now().strftime('%H:%M') == '10:00' }}
+
+  action:
+    # 1. REST-sensor nu verversen (on-demand)
+    - service: homeassistant.update_entity
+      target:
+        entity_id: sensor.knmi_data_utrecht
+
+    # 2. Wachten tot het attribuut 'full_text' gevuld is
+    - wait_template: >
+        {% set t = state_attr('sensor.knmi_weerbericht_utrecht', 'full_text') %}
+        {{ t not in [none, '', 'unknown', 'unavailable'] }}
+      timeout: "00:00:10"
+      continue_on_timeout: true
+
+    # 3. Tekst met fallback uit attribuut
+    - variables:
+        weer_text: >
+          {% set t = state_attr('sensor.knmi_weerbericht_utrecht', 'full_text') %}
+          {% if t in [none, '', 'unknown', 'unavailable'] %}
+            Het weerbericht voor Utrecht is nu niet beschikbaar.
+          {% else %}
+            {{ t }}
+          {% endif %}
+
+#    - service: persistent_notification.create
+#      data:
+#        title: "TEST"
+#        message: "{{ weer_text }}"
+
+
+    # 5. Voorlezen via TTS
+    - service: script.tts_with_smart_volume
+      data:
+        player: media_player.achterkamer
+        text: "Goedemorgen, het weerbericht voor Utrecht: {{ weer_text }}"
+        volume: 0.35
+
+  mode: single
