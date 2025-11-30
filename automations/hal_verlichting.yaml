@@ -35,7 +35,7 @@
   condition:
     - condition: numeric_state
       entity_id: sensor.sensor_hal_licht
-      below: 50
+      below: 40
 
   action:
     - service: light.turn_on
