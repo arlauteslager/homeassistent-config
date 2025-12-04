@@ -74,3 +74,22 @@
     - service: light.turn_off
       target:
         entity_id: light.lamp_voordeur
+
+#chatGPT: when light state changed to on, turn of after 10 minutes
+- alias: verlichting hal countdown 15 minutes
+  id: verlichting hal countdown 15 minutes
+
+  trigger:
+    - platform: state
+      entity_id: light.verlichting_hal
+      from: "off"
+      to: "on"
+
+  action:
+    - delay: 00:15:00
+
+    - service: light.turn_off
+      target:
+        entity_id: light.verlichting_hal
+
+

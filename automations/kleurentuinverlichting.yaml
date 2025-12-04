@@ -20,4 +20,4 @@
       default:
         - service: switch.turn_off
           target:
-            entity_id: light.kleurentuinverlichting
+            entity_id: switch.kleurentuinverlichting

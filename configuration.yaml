@@ -25,38 +25,16 @@ timer:
 
 sensor:
   - platform: rest
-    name: nederlandse_mop
-    # Let op: sommige documentatie gebruikt .php, niet .html
-    resource: "http://api.apekool.nl/services/jokes/getjoke.php?type=nl"
+    name: joke
+    resource: "https://v2.jokeapi.dev/joke/Any?type=single&safe-mode"
     method: GET
-    scan_interval: 9999999999
+    scan_interval: 1800  # elke 30 min een nieuwe mop
     value_template: >-
       {% if value_json is defined and value_json.joke is defined %}
         {{ value_json.joke }}
       {% else %}
-        Geen mop beschikbaar.
+        No joke available.
       {% endif %}
-
-  # 2. EverXP – categorie 'Woman' (Marjolein)
-  - platform: rest
-    name: everxp_woman_quote
-    # vul hier je echte API-key in i.p.v. JOUW_API_KEY_HIER
-    resource: "https://api.everxp.com/heading/quote?api_key=dG5qZDZ2dGUwOA==&quote=Woman&lang=en"
-    method: GET
-    scan_interval: 999999999
-    value_template: "{{ value_json.heading }}"
-    headers:
-      User-Agent: HomeAssistant
-
-  # 3. ZenQuotes – random quote (Arnaud)
-  - platform: rest
-    name: zen_quote
-    resource: "https://zenquotes.io/api/random"
-    method: GET
-    scan_interval: 999999999
-    value_template: "{{ value_json[0].q }} — {{ value_json[0].a }}"
-    headers:
-      User-Agent: HomeAssistant
       
   - platform: rest
     name: knmi_data_utrecht
@@ -68,13 +46,13 @@ sensor:
       - actual
       - forecast
 
-  - platform: history_stats
-    name: Boiler actief vandaag
-    entity_id: switch.kachel_beneden_stopcontact_1
-    state: "on"
-    type: time
-    start: "{{ now().replace(hour=0, minute=0, second=0) }}"
-    end: "{{ now() }}"
+#  - platform: history_stats
+#    name: Boiler actief vandaag
+#    entity_id: switch.kachel_beneden_stopcontact_1
+#    state: "on"
+#    type: time
+#    start: "{{ now().replace(hour=0, minute=0, second=0) }}"
+#    end: "{{ now() }}"
 
 template:
   - sensor:

@@ -9,8 +9,8 @@
 #        - device_tracker.iphone15_marjolein
         - device_tracker.iphone13arnaud
         - device_tracker.iphone_arnaud
-        - device_tracker.iphone
-        - device_tracker.mac_mini
+#        - device_tracker.iphone
+#        - device_tracker.mac_mini
       from: 'not_home'
       to: 'home'
   condition:
@@ -36,18 +36,16 @@
           {% elif trigger.entity_id.endswith('marjolein') %}
             joke
           {% else %}
-            joke
+            niets
           {% endif %}
 
     # 2) Bepaal bijbehorende sensor-entity
     - variables:
         selected_entity: >
           {% if bron == 'joke' %}
-            sensor.nederlandse_mop
-          {% elif bron == 'everxp' %}
-            sensor.everxp_woman_quote
+            sensor.joke
           {% else %}
-            sensor.nederlandse_mop
+            sensor.joke
           {% endif %}
 
     # 3) Haal alleen deze sensor nu op
@@ -70,15 +68,25 @@
             {{ v }}
           {% endif %}
 
+    - service: openai_conversation.conversation
+      data:
+        # pas assistant_name aan als jij een andere hebt ingesteld
+        assistant: default
+        prompt: >
+          Vertaal deze Engelse mop naar natuurlijk, vlot Nederlands.
+          Maak er één lopende tekst van zonder extra tekst ervoor of erna.
+          Mop: "{{ v }}"
+      response_variable: antwoord_ai
+
     - service: script.tts_with_smart_volume
       data:
         player: media_player.achterkamer
-        text: "Héé {{ binnenkomer }}!, je bent er. Ken je deze al? ,,, {{ tekst }}"
+        text: "Héé {{ binnenkomer }}!, je bent er. Ken je deze al? ,,, {{ antwoord_ai['response'] }}"
         volume: 0.25
 
     - service: logbook.log
       data:
         name: "HOME"
-        message: "Héé {{ binnenkomer }}!, je bent er. Ken je deze al: {{ tekst }}"
+        message: "Héé {{ binnenkomer }}!, je bent er. {{ tekst }}"
     
   mode: parallel
