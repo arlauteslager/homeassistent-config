@@ -5,7 +5,7 @@
       entity_id: schedule.kleurentuinverlichting_schema
       to: "on"
     - platform: state
-      entity_id: schedule.kleurenverlichting_schema
+      entity_id: schedule.kleurentuinverlichting_schema
       to: "off"
 
   action:

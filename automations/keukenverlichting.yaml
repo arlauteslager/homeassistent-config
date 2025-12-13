@@ -16,9 +16,7 @@
               value_template: >
                 {% set m = now().month %}
                 {% set d = now().day %}
-                {{ (m > 3 and m < 10) or
-                   (m == 3 and d >= 21) or
-                   (m == 10 and d <= 21) }}
+                {{ (m > 3 and m < 10) or (m == 3 and d >= 21) or (m == 10 and d <= 21) }}
             # Nacht: na zonsondergang OF vóór zonsopgang
             - condition: or
               conditions:
@@ -59,12 +57,12 @@
       target:
         entity_id: switch.keukenverlichting      # pas aan
 
-    # Wachten tot 10 minuten na laatste 'geen beweging'
+    # Wachten tot 15 minuten na laatste 'geen beweging'
     - wait_for_trigger:
         - platform: state
           entity_id: binary_sensor.bewegingssensor_beweging
           to: "off"
-          for: "00:10:00"
+          for: "00:15:00"
 
     # Daarna lamp uit
     - service: switch.turn_off

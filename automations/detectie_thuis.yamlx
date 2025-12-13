@@ -29,29 +29,32 @@
           {% elif trigger.entity_id.endswith('mini') %}MacMini
           {% else %}iemand{% endif %}
 
+        selected_entity: >
+          sensor.joke
+
         # Welke bron gebruiken we?
-        bron: >
-          {% if trigger.entity_id.endswith('jinke') or trigger.entity_id.endswith('olin') %}
-            joke
-          {% elif trigger.entity_id.endswith('marjolein') %}
-            joke
-          {% else %}
-            niets
-          {% endif %}
+#        bron: >
+#          {% if trigger.entity_id.endswith('jinke') or trigger.entity_id.endswith('olin') %}
+#            joke
+#          {% elif trigger.entity_id.endswith('marjolein') %}
+#            joke
+#          {% else %}
+#            niets
+#          {% endif %}
 
     # 2) Bepaal bijbehorende sensor-entity
-    - variables:
-        selected_entity: >
-          {% if bron == 'joke' %}
-            sensor.joke
-          {% else %}
-            sensor.joke
-          {% endif %}
+#    - variables:
+#        selected_entity: >
+#          {% if bron == 'joke' %}
+#            sensor.joke
+#          {% else %}
+#            sensor.joke
+#          {% endif %
 
     # 3) Haal alleen deze sensor nu op
     - service: homeassistant.update_entity
       data:
-        entity_id: "{{ selected_entity }}"
+        entity_id: "{{selected_entity}}"
 
     # 4) Wacht tot er een bruikbare waarde is (max 5 sec)
     - wait_template: "{{ states(selected_entity) not in ['unknown', 'unavailable', ''] }}"
@@ -74,8 +77,8 @@
         assistant: default
         prompt: >
           Vertaal deze Engelse mop naar natuurlijk, vlot Nederlands.
-          Maak er één lopende tekst van zonder extra tekst ervoor of erna.
-          Mop: "{{ v }}"
+          Maak er één lopende mop van zonder extra tekst ervoor of erna, met de clou op het eind zodat je er om moet lachen. Let bij het vertalen op dat de nederlandse vertaling nog steeds een clou heeft en grappig is.
+          Mop: "{{ tekst }}"
       response_variable: antwoord_ai
 
     - service: script.tts_with_smart_volume
@@ -87,6 +90,6 @@
     - service: logbook.log
       data:
         name: "HOME"
-        message: "Héé {{ binnenkomer }}!, je bent er. {{ tekst }}"
+        message: "Héé {{ binnenkomer }}"
     
   mode: parallel

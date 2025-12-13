@@ -33,17 +33,25 @@
       entity_id: binary_sensor.contact_sensor_deur
       to: "on"
 
-  # Alleen inschakelen als de zon onder is
+  # Alleen inschakelen als de zon onder is en alleen als de lamp nu uit staat
   condition:
     - condition: state
       entity_id: sun.sun
       state: "below_horizon"
+    - condition: state
+      entity_id: light.kerstverlichting
+      state: "off"
 
   action:
     - service: light.turn_on
       target:
         entity_id: light.kerstverlichting
 
+    - service: logbook.log
+      data:
+        name: "DEBUG"
+        message: "Action block gestart, dus blijkbaar is lamp nu uit en zonder onder"
+    
     - delay: "00:05:00"
 
     - service: light.turn_off

@@ -10,6 +10,10 @@
       entity_id: binary_sensor.voordeur
       to: "on"
 
+    - platform: state
+      entity_id: binary_sensor.voorkamerdeur
+      to: "on"
+
   condition:
     - condition: numeric_state
       entity_id: sensor.sensor_hal_licht
@@ -32,6 +36,10 @@
       entity_id: binary_sensor.voordeur
       to: "on"
 
+    - platform: state
+      entity_id: binary_sensor.voorkamerdeur
+      to: "on"
+
   condition:
     - condition: numeric_state
       entity_id: sensor.sensor_hal_licht
@@ -51,6 +59,11 @@
       to: "off"
       for: "00:05:00"
 
+    - platform: state
+      entity_id: binary_sensor.voorkamerdeur
+      to: "off"
+      for: "00:05:00"
+
   action:
     - service: light.turn_off
       target:
@@ -67,6 +80,11 @@
 
     - platform: state
       entity_id: binary_sensor.voordeur
+      to: "off"
+      for: "00:03:00"
+
+    - platform: state
+      entity_id: binary_sensor.voorkamerdeur
       to: "off"
       for: "00:03:00"
 
@@ -91,5 +109,22 @@
     - service: light.turn_off
       target:
         entity_id: light.verlichting_hal
+
+#chatGPT: when light state changed to on, turn of after 10 minutes
+- alias: lamp voordeur countdown 15 minutes
+  id: lamp voordeur countdown 15 minutes
+
+  trigger:
+    - platform: state
+      entity_id: light.lamp_voordeur
+      from: "off"
+      to: "on"
+
+  action:
+    - delay: 00:15:00
+
+    - service: light.turn_off
+      target:
+        entity_id: light.lamp_voordeur
 
 
