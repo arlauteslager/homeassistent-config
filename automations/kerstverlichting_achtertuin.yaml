@@ -3,16 +3,16 @@
   mode: single
   trigger:
     - platform: state
-      entity_id: schedule.kerstverlichting_schema
+      entity_id: schedule.schedule_kerstverlichting_schema
       to: "on"
     - platform: state
-      entity_id: schedule.kerstverlichting_schema
+      entity_id: schedule.schedule_kerstverlichting_schema
       to: "off"
 
   action:
     - choose:
         # Schema staat AAN → lamp AAN
-        - conditions: "{{ is_state('schedule.kerstverlichting_schema', 'on') }}"
+        - conditions: "{{ is_state('schedule.schedule_kerstverlichting_schema', 'on') }}"
           sequence:
             - service: light.turn_on
               target:
