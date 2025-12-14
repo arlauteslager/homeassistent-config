@@ -17,6 +17,11 @@
             - service: light.turn_on
               target:
                 entity_id: light.kerstverlichting
+            - service: logbook.log
+              data:
+                name: "DEBUG"
+                message: "kerstverlichting achtertuin aangezet door schema"
+
       # Schema staat UIT → lamp UIT
       default:
         - service: light.turn_off

@@ -156,8 +156,8 @@ template:
       - name: "Woonkamer dauwpunt"
         unit_of_measurement: "°C"
         state: >
-          {% set T = states('sensor.woonkamerklimaat_temperatuur')|float(0) %}
-          {% set RH = states('sensor.woonkamerklimaat_luchtvochtigheid')|float(0) %}
+          {% set T = states('sensor.woonkamer4in1_temperatuur')|float(0) %}
+          {% set RH = states('sensor.woonkamer4in1_luchtvochtigheid')|float(0) %}
           {% set a = 17.62 %}
           {% set b = 243.12 %}
           {% set gamma = (RH/100) | log + (a*T)/(b+T) %}
@@ -167,15 +167,15 @@ template:
       - name: "Woonkamer dauwpuntverschil"
         unit_of_measurement: "°C"
         state: >
-          {% set T = states('sensor.woonkamerklimaat_temperatuur')|float(0) %}
+          {% set T = states('sensor.woonkamer4in1_temperatuur')|float(0) %}
           {% set Td = states('sensor.woonkamer_dauwpunt')|float(0) %}
           {{ (T - Td) | round(2) }}
 
   - binary_sensor:
       - name: "Woonkamer klimaat te vochtig"
         state: >
-          {% set T = states('sensor.woonkamerklimaat_temperatuur')|float(0) %}
-          {% set RH = states('sensor.woonkamerklimaat_luchtvochtigheid')|float(0) %}
+          {% set T = states('sensor.woonkamer4in1_temperatuur')|float(0) %}
+          {% set RH = states('sensor.woonkamer4in1_luchtvochtigheid')|float(0) %}
           {% set d = states('sensor.woonkamer_dauwpuntverschil')|float(99) %}
           {{ (d <= 4) or (T <= 16 and d <= 5) or (T <= 16 and RH >= 65) }}
         delay_on: "00:30:00"
@@ -183,7 +183,7 @@ template:
 
       - name: "Woonkamer klimaat te droog"
         state: >
-          {% set RH = states('sensor.woonkamerklimaat_luchtvochtigheid')|float(0) %}
+          {% set RH = states('sensor.woonkamer4in1_luchtvochtigheid')|float(0) %}
           {{ RH <= 35 }}
         delay_on: "01:00:00"
         delay_off: "00:30:00"

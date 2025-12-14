@@ -4,7 +4,7 @@
 
   trigger:
     - platform: state
-      entity_id: binary_sensor.WOONKAMER_MOTION   # <-- HIER AANPASSEN
+      entity_id: binary_sensor.woonkamer4in1   # <-- HIER AANPASSEN
       to: "on"
 
   condition:
