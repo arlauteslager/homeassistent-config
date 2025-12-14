@@ -1,0 +1,59 @@
+- id: woonkamer_klimaat_melding_bij_beweging
+  alias: "Woonkamer klimaat: melding bij beweging (Sonos, max 1x/uur)"
+  mode: single
+
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.WOONKAMER_MOTION   # <-- HIER AANPASSEN
+      to: "on"
+
+  condition:
+    - condition: state
+      entity_id: timer.woonkamer_klimaat_melding_cooldown
+      state: "idle"
+
+    - condition: or
+      conditions:
+        - condition: state
+          entity_id: binary_sensor.woonkamer_klimaat_te_vochtig
+          state: "on"
+        - condition: state
+          entity_id: binary_sensor.woonkamer_klimaat_te_droog
+          state: "on"
+
+  action:
+    - variables:
+        T: "{{ states('sensor.woonkamerklimaat_temperatuur')|float(0) }}"
+        RH: "{{ states('sensor.woonkamerklimaat_luchtvochtigheid')|float(0) }}"
+        d: "{{ states('sensor.woonkamer_dauwpuntverschil')|float(99) }}"
+
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: binary_sensor.woonkamer_klimaat_te_vochtig
+              state: "on"
+          sequence:
+            - service: script.tts_with_smart_volume
+              data:
+                message: >
+                  Let op. De lucht is te vochtig in de woonkamer.
+                  Temperatuur {{ T|round(1) }} graden,
+                  luchtvochtigheid {{ RH|round(0) }} procent.
+                  Advies: ventileer of verwarm kort om schimmel te voorkomen.
+
+        - conditions:
+            - condition: state
+              entity_id: binary_sensor.woonkamer_klimaat_te_droog
+              state: "on"
+          sequence:
+            - service: script.tts_with_smart_volume
+              data:
+                message: >
+                  Let op. De lucht is te droog in de woonkamer.
+                  Temperatuur {{ T|round(1) }} graden,
+                  luchtvochtigheid {{ RH|round(0) }} procent.
+                  Advies: eventueel tijdelijk bevochtigen.
+
+    - service: timer.start
+      target:
+        entity_id: timer.woonkamer_klimaat_melding_cooldown
