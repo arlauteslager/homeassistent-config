@@ -40,3 +40,7 @@ www/community/
 # Editor / tooling
 .vscode/
 .history/
+
+# Never commit SSH keys
+.ssh/
+**/.ssh/
