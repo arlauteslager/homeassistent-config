@@ -33,7 +33,7 @@
         - conditions:
             - condition: time
               after: '06:00:00'
-              before: '17:00:00'
+              before: '16:00:00'
           sequence:
             - service: light.turn_on
               target:
@@ -43,7 +43,7 @@
                 color_temp_kelvin: 5000
         - conditions:
             - condition: time
-              after: '17:00:00'
+              after: '16:00:00'
               before: '20:00:00'
           sequence:
             - service: light.turn_on

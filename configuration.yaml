@@ -24,19 +24,8 @@ timer:
     duration: '00:00:10'
   woonkamer_klimaat_melding_cooldown:
     duration: "01:00:00"    
+
 sensor:
-#  - platform: rest
-#    name: joke
-#    resource: "https://v2.jokeapi.dev/joke/Any?type=single&safe-mode"
-#    method: GET
-#    scan_interval: 1800  # elke 30 min een nieuwe mop
-#    value_template: >-
-#      {% if value_json is defined and value_json.joke is defined %}
-#        {{ value_json.joke }}
-#      {% else %}
-#        No joke available.
-#      {% endif %}
-#      
   - platform: rest
     name: knmi_data_utrecht
     resource: "https://data.buienradar.nl/2.0/feed/json"
@@ -51,7 +40,7 @@ recorder:
   exclude:
     entities:
       - sensor.knmi_data_utrecht
-      - sensor.knmi_data_utrecht_2
+
 template:
   - sensor:
       - name: Boiler Opwarmtijd Resterend
