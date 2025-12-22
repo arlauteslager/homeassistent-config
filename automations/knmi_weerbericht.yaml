@@ -6,7 +6,7 @@
       at: "07:25:00"
     # Zaterdag & zondag om 10:00
     - platform: time
-      at: "10:39:00"
+      at: "10:00:00"
 
   condition:
     - condition: or

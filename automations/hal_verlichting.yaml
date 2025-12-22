@@ -14,10 +14,16 @@
       entity_id: binary_sensor.voorkamerdeur
       to: "on"
 
+#  condition:
+#    - condition: numeric_state
+#      entity_id: sensor.sensor_hal_licht
+#      below: 50
+#
   condition:
     - condition: numeric_state
-      entity_id: sensor.sensor_hal_licht
-      below: 50
+      entity_id: sun.sun
+      attribute: elevation
+      below: 15
 
   action:
     - service: light.turn_on
@@ -40,10 +46,15 @@
       entity_id: binary_sensor.voorkamerdeur
       to: "on"
 
+#  condition:
+#    - condition: numeric_state
+#      entity_id: sensor.sensor_hal_licht
+#      below: 40
   condition:
     - condition: numeric_state
-      entity_id: sensor.sensor_hal_licht
-      below: 40
+      entity_id: sun.sun
+      attribute: elevation
+      below: 15
 
   action:
     - service: light.turn_on

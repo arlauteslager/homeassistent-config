@@ -135,12 +135,7 @@ template:
             {% else %}
               Het weerbericht voor Utrecht is momenteel niet beschikbaar.
             {% endif %}
-tts:
-  - platform: google_translate
-    language: 'nl'
-    cache: true
 
-template:
   - sensor:
       - name: "Woonkamer dauwpunt"
         unit_of_measurement: "°C"
@@ -177,3 +172,7 @@ template:
         delay_on: "01:00:00"
         delay_off: "00:30:00"
 
+tts:
+  - platform: google_translate
+    language: 'nl'
+    cache: true
