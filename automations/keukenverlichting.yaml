@@ -1,5 +1,5 @@
-- id: keukenverlichting_beweging_seizoenen
-  alias: Keukenverlichting op beweging met seizoenen
+- id: keukenverlichting_aan_bij_beweging
+  alias: Keukenverlichting aan bij beweging
   trigger:
     - platform: state
       entity_id: binary_sensor.woonkamer4in1
@@ -16,12 +16,12 @@
       target:
         entity_id: switch.keukenverlichting      # pas aan
 
-    # Wachten tot 15 minuten na laatste 'geen beweging'
+    # Wachten 10 minuten na laatste 'geen beweging' voordat licht uitgezet wordt
     - wait_for_trigger:
         - platform: state
           entity_id: binary_sensor.woonkamer4in1
           to: "off"
-          for: "00:15:00"
+          for: "00:10:00"
 
     # Daarna lamp uit
     - service: switch.turn_off

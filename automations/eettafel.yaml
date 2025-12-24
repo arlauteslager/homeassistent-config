@@ -4,64 +4,44 @@
     - platform: state
       entity_id: binary_sensor.woonkamer4in1
       to: 'on'
-    # Trigger 2: lamp wordt aangezet (gaat van uit -> aan)
     - platform: state
       entity_id: light.lamp_eetkamertafel
       to: 'on'
-  condition: []
+  
   action:
-    # 1) Altijd zichtbaar (belletje rechtsboven)
-    #- service: persistent_notification.create
-    #  data:
-    #    title: "TEST beweging"
-    #    message: "Trigger fired om {{ now() }}"
-
-    # 2) Logbook (Logboek) – zie je terug in Logboek
-    #- service: logbook.log
-    #  data:
-    #    name: "test"
-    #    message: "Beweging gedetecteerd → automation gestart om {{ now() }}"
-
-    # 3) (optioneel) System log (Instellingen → Systeem → Logboeken)
-    #- service: system_log.write
-    #  data:
-    #    level: warning
-    #    message: "TEST: beweging → state == on om {{ now() }}"
-
-    # Hierna je echte choose-blokken voor lichtinstellingen
     - choose:
-        - conditions:
-            - condition: time
-              after: '06:00:00'
-              before: '16:00:00'
-          sequence:
-            - service: light.turn_on
-              target:
-                entity_id: light.lamp_eetkamertafel
-              data:
-                brightness_pct: 100
-                color_temp_kelvin: 5000
-        - conditions:
-            - condition: time
-              after: '16:00:00'
-              before: '20:00:00'
-          sequence:
-            - service: light.turn_on
-              target:
-                entity_id: light.lamp_eetkamertafel
-              data:
-                brightness_pct: 50
-                color_temp_kelvin: 2250
-        - conditions:
-            - condition: time
-              after: '20:00:00'
-              before: '23:59:59'
-          sequence:
-            - service: light.turn_on
-              target:
-                entity_id: light.lamp_eetkamertafel
-              data:
-                brightness_pct: 20
-                color_temp_kelvin: 2100
+      - conditions:
+          - condition: time
+            after: '06:00:00'
+            before: '16:00:00'
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: light.lamp_eetkamertafel
+            data:
+              brightness_pct: 100
+              color_temp_kelvin: 5000
+      - conditions:
+          - condition: time
+            after: '16:00:00'
+            before: '20:00:00'
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: light.lamp_eetkamertafel
+            data:
+              brightness_pct: 50
+              color_temp_kelvin: 2250
+      - conditions:
+          - condition: time
+            after: '20:00:00'
+            before: '23:59:59'
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: light.lamp_eetkamertafel
+            data:
+              brightness_pct: 20
+              color_temp_kelvin: 2100
       default: []
   mode: restart

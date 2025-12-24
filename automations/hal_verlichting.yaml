@@ -3,15 +3,10 @@
 
   trigger:
     - platform: state
-      entity_id: binary_sensor.sensor_hal
-      to: "on"
-
-    - platform: state
-      entity_id: binary_sensor.voordeur
-      to: "on"
-
-    - platform: state
-      entity_id: binary_sensor.voorkamerdeur
+      entity_id: 
+        - binary_sensor.sensor_hal
+        - binary_sensor.voordeur
+        - binary_sensor.voorkamerdeur
       to: "on"
 
   condition:
@@ -24,20 +19,37 @@
       target:
         entity_id: light.verlichting_hal
 
+- alias: Halverlichting aan bij beweging overloop maar niet snachts
+  id: halverlichting_aan_bij_beweging_overloop_maar_niet_snachts
+
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.overloop4in1
+      to: "on"
+
+  condition:
+  - condition: state
+    entity_id: binary_sensor.donker_buiten
+    state: "on"
+
+  - condition: time
+    after: "07:00:00"
+    before: "00:00:00"
+
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.verlichting_hal
+
 - alias: voordeur lamp aan bij voordeur opening en beweging
   id: lamp_voordeur_aan_bij_beweging_en_voordeur_opening
 
   trigger:
     - platform: state
-      entity_id: binary_sensor.sensor_hal
-      to: "on"
-
-    - platform: state
-      entity_id: binary_sensor.voordeur
-      to: "on"
-
-    - platform: state
-      entity_id: binary_sensor.voorkamerdeur
+      entity_id: 
+      -  binary_sensor.sensor_hal
+      -  binary_sensor.voordeur
+      -  binary_sensor.voorkamerdeur
       to: "on"
 
   condition:
