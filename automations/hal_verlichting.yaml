@@ -1,4 +1,4 @@
-- alias: Halverlichting aan bij beweging en voordeur opening
+- alias: Halverlichting aan bij beweging en deuren opening
   id: halverlichting_aan_bij_beweging_en_voordeur_opening
 
   trigger:
@@ -14,16 +14,10 @@
       entity_id: binary_sensor.voorkamerdeur
       to: "on"
 
-#  condition:
-#    - condition: numeric_state
-#      entity_id: sensor.sensor_hal_licht
-#      below: 50
-#
   condition:
-    - condition: numeric_state
-      entity_id: sun.sun
-      attribute: elevation
-      below: 15
+  - condition: state
+    entity_id: binary_sensor.donker_buiten
+    state: "on"
 
   action:
     - service: light.turn_on
@@ -46,16 +40,11 @@
       entity_id: binary_sensor.voorkamerdeur
       to: "on"
 
-#  condition:
-#    - condition: numeric_state
-#      entity_id: sensor.sensor_hal_licht
-#      below: 40
   condition:
-    - condition: numeric_state
-      entity_id: sun.sun
-      attribute: elevation
-      below: 15
-
+  - condition: state
+    entity_id: binary_sensor.donker_buiten
+    state: "on"
+    
   action:
     - service: light.turn_on
       target:

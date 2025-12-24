@@ -2,7 +2,7 @@
   alias: Beweging → eetkamertafel-licht per dagdeel
   trigger:
     - platform: state
-      entity_id: binary_sensor.bewegingssensor_beweging
+      entity_id: binary_sensor.woonkamer4in1
       to: 'on'
     # Trigger 2: lamp wordt aangezet (gaat van uit -> aan)
     - platform: state

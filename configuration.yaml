@@ -42,6 +42,14 @@ recorder:
       - sensor.knmi_data_utrecht
 
 template:
+  
+  - binary_sensor:
+      - name: "Donker buiten"
+        unique_id: donker_buiten
+        state: >
+          {{ state_attr('sun.sun', 'elevation') is not none
+             and (state_attr('sun.sun', 'elevation') | float) < 5 }}
+
   - sensor:
       - name: Boiler Opwarmtijd Resterend
         unique_id: boiler_opwarmtijd_resterend
