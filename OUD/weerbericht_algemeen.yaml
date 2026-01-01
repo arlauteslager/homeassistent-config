@@ -1,0 +1,94 @@
+- id: lees_knmi_weerbericht_algemeen_op_start
+  alias: Lees KNMI weerbericht algemeen (weatherreport) op vaste tijden
+  trigger:
+    # Doordeweeks om 07:25
+    - platform: time
+      at: "07:28:00"
+    # Weekend om 10:00
+    - platform: time
+      at: "10:05:00"
+
+  condition:
+    - condition: or
+      conditions:
+        # Ma-vr om 07:25
+        - condition: and
+          conditions:
+            - condition: time
+              weekday:
+                - mon
+                - tue
+                - wed
+                - thu
+                - fri
+            - condition: template
+              value_template: >
+                {{ now().strftime('%H:%M') == '07:25' }}
+
+        # Za-zo om 10:00
+        - condition: and
+          conditions:
+            - condition: time
+              weekday:
+                - sat
+                - sun
+            - condition: template
+              value_template: >
+                {{ now().strftime('%H:%M') == '10:00' }}
+
+  action:
+    # 1) Data verversen
+    - service: homeassistant.update_entity
+      target:
+        entity_id: sensor.knmi_data_utrecht
+
+    # 2) Wachten tot full_text gevuld is
+    - wait_template: >
+        {% set t = state_attr('sensor.knmi_weerbericht_algemeen', 'full_text') %}
+        {{ t not in [none, '', 'unknown', 'unavailable'] }}
+      timeout: "00:00:10"
+      continue_on_timeout: true
+
+    # 3) Tekst bepalen met fallback
+    - variables:
+        weer_text: >
+          {% set t = state_attr('sensor.knmi_weerbericht_algemeen', 'full_text') %}
+          {% if t in [none, '', 'unknown', 'unavailable'] %}
+            Het algemene weerbericht is nu niet beschikbaar.
+          {% else %}
+            {{ t }}
+          {% endif %}
+
+    # 4) Voorlezen via Sonos script
+    #- service: script.tts_with_smart_volume
+    #  data:
+    #    player: media_player.achterkamer
+    #    text: "Goedemorgen, het algemene weerbericht: {{ weer_text }}"
+    #    volume: 0.35
+    - variables:
+        chunks: >
+          {% set txt = weer_text | trim %}
+          {% if txt in [none,'','unknown','unavailable'] %}
+            {{ [] }}
+          {% else %}
+            {{ txt | regex_findall('.{1,350}(?:\\s|$)') }}
+          {% endif %}
+
+    - repeat:
+        for_each: "{{ chunks }}"
+        sequence:
+          - service: script.tts_with_smart_volume
+            data:
+              player: media_player.achterkamer
+              text: "{{ repeat.item }}"
+              volume: 0.35
+          - wait_template: "{{ is_state('media_player.achterkamer', 'idle') }}"
+            timeout: "00:00:30"
+            continue_on_timeout: true
+
+    - service: persistent_notification.create
+      data:
+        title: "TEST"
+        message: "{{ weer_text }}"
+
+  mode: single

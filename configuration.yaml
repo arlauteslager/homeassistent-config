@@ -2,7 +2,12 @@
 # Loads default set of integrations. Do not remove.
 default_config:
 
-# Load frontend themes from the themes folder
+logger:
+  default: info
+  logs:
+    custom_components.pyscript: warning
+
+  # Load frontend themes from the themes folder
 frontend:
   themes: !include_dir_merge_named themes
 
@@ -10,7 +15,7 @@ frontend:
 automation: !include_dir_merge_list automations/
 script: !include_dir_merge_list scripts/
 scene: !include scenes.yaml
-#test: !include test.yaml
+template: !include templates.yaml
 
 input_boolean:
   boiler_al_verwarmd:
@@ -20,8 +25,6 @@ input_boolean:
 timer:
   boiler_opwarmtijd:
     duration: '00:30:00'
-  test_joepie:
-    duration: '00:00:10'
   woonkamer_klimaat_melding_cooldown:
     duration: "01:00:00"    
 
@@ -41,144 +44,6 @@ recorder:
     entities:
       - sensor.knmi_data_utrecht
 
-template:
-  
-  - binary_sensor:
-      - name: "Donker buiten"
-        unique_id: donker_buiten
-        state: >
-          {{ state_attr('sun.sun', 'elevation') is not none
-             and (state_attr('sun.sun', 'elevation') | float) < 5 }}
-
-  - sensor:
-      - name: Boiler Opwarmtijd Resterend
-        unique_id: boiler_opwarmtijd_resterend
-        unit_of_measurement: "hh:mm:ss"
-        icon: mdi:timer
-        
-        # Dit deel bepaalt of de sensor überhaupt een waarde heeft (Beschikbaarheid)
-        availability: >
-          {{ state_attr('timer.boiler_opwarmtijd', 'finishes_at') is not none }}
-
-        # Dit deel berekent de waarde ALLEEN als de sensor beschikbaar is
-        state: >
-          {% set finish_time = state_attr('timer.boiler_opwarmtijd', 'finishes_at') %}
-          {% set time_left = (as_timestamp(finish_time) - as_timestamp(now())) | int %}
-          {% if time_left > 0 %}
-            {{ time_left | timestamp_custom('%H:%M:%S', true) }}
-          {% else %}
-            00:00:00
-          {% endif %}
-
-  - sensor:
-      - name: "knmi_weerbericht_utrecht"
-        state: "ready"
-        attributes:
-          full_text: >-
-            {% set actual = state_attr('sensor.knmi_data_utrecht', 'actual') %}
-            {% set forecast = state_attr('sensor.knmi_data_utrecht', 'forecast') %}
-            {% if actual is not none and actual.stationmeasurements is defined %}
-              {% set stations = actual.stationmeasurements %}
-              {% set debilt_list = stations
-                  | selectattr('stationid', 'equalto', 6260)
-                  | list %}
-              {% if debilt_list | length > 0 %}
-                {% set s = debilt_list[0] %}
-
-                {% set temp     = s.temperature        | float(0) %}
-                {% set feel     = s.feeltemperature    | float(0) %}
-                {% set winddir  = s.winddirection      | default('onbekende richting') %}
-                {% set bft      = s.windspeedBft       | default('?') %}
-                {% set desc     = s.weatherdescription | default('') %}
-                {% set precip   = s.precipitation      | float(0) %}
-                {% set rain1h   = s.rainFallLastHour   | float(0) %}
-                {% set rain24h  = s.rainFallLast24Hour | float(0) %}
-
-                {%- set now_rain_sentence -%}
-                  {%- if precip > 0 -%}
-                    Op dit moment valt er neerslag, ongeveer {{ '%.1f'|format(precip) }} millimeter per uur.
-                  {%- else -%}
-                    Op dit moment is het droog.
-                  {%- endif -%}
-                {%- endset -%}
-
-                {%- set history_sentence -%}
-                  {%- if rain1h > 0 and rain24h > 0 -%}
-                    In het afgelopen uur is er {{ '%.1f'|format(rain1h) }} millimeter gevallen
-                    en in de afgelopen 24 uur in totaal {{ '%.1f'|format(rain24h) }} millimeter.
-                  {%- elif rain24h > 0 -%}
-                    In de afgelopen 24 uur is er {{ '%.1f'|format(rain24h) }} millimeter gevallen.
-                  {%- else -%}
-                    Er is de afgelopen 24 uur nauwelijks neerslag gevallen.
-                  {%- endif -%}
-                {%- endset -%}
-
-                {%- set forecast_sentence -%}
-                  {%- if forecast is not none
-                        and forecast.fivedayforecast is defined
-                        and (forecast.fivedayforecast | length) > 0 -%}
-                    {%- set today_fc = forecast.fivedayforecast[0] -%}
-                    {%- set rainChance = today_fc.rainChance   | default(0) -%}
-                    {%- set mmMin      = today_fc.mmRainMin    | default(0) -%}
-                    {%- set mmMax      = today_fc.mmRainMax    | default(0) -%}
-                    {%- if rainChance|int > 0 -%}
-                      De kans op regen vandaag is ongeveer {{ rainChance }} procent,
-                      met tussen {{ mmMin }} en {{ mmMax }} millimeter neerslag verwacht.
-                    {%- else -%}
-                      Voor vandaag wordt weinig neerslag verwacht.
-                    {%- endif -%}
-                  {%- endif -%}
-                {%- endset -%}
-
-                Het is nu {{ temp|round(1) }} graden in regio Utrecht,
-                met een gevoelstemperatuur van {{ feel|round(1) }} graden.
-                De wind komt uit het {{ winddir }} en heeft een kracht van {{ bft }} Beaufort.
-                {{ desc|capitalize }}.
-                {{ now_rain_sentence }}
-                {{ history_sentence }}
-                {{ forecast_sentence }}
-              {% else %}
-                Geen weergegevens gevonden voor De Bilt.
-              {% endif %}
-            {% else %}
-              Het weerbericht voor Utrecht is momenteel niet beschikbaar.
-            {% endif %}
-
-  - sensor:
-      - name: "Woonkamer dauwpunt"
-        unit_of_measurement: "°C"
-        state: >
-          {% set T = states('sensor.woonkamer4in1_temperatuur')|float(0) %}
-          {% set RH = states('sensor.woonkamer4in1_luchtvochtigheid')|float(0) %}
-          {% set a = 17.62 %}
-          {% set b = 243.12 %}
-          {% set gamma = (RH/100) | log + (a*T)/(b+T) %}
-          {% set Td = (b*gamma)/(a-gamma) %}
-          {{ Td | round(2) }}
-
-      - name: "Woonkamer dauwpuntverschil"
-        unit_of_measurement: "°C"
-        state: >
-          {% set T = states('sensor.woonkamer4in1_temperatuur')|float(0) %}
-          {% set Td = states('sensor.woonkamer_dauwpunt')|float(0) %}
-          {{ (T - Td) | round(2) }}
-
-  - binary_sensor:
-      - name: "Woonkamer klimaat te vochtig"
-        state: >
-          {% set T = states('sensor.woonkamer4in1_temperatuur')|float(0) %}
-          {% set RH = states('sensor.woonkamer4in1_luchtvochtigheid')|float(0) %}
-          {% set d = states('sensor.woonkamer_dauwpuntverschil')|float(99) %}
-          {{ (d <= 4) or (T <= 16 and d <= 5) or (T <= 16 and RH >= 65) }}
-        delay_on: "00:30:00"
-        delay_off: "00:20:00"
-
-      - name: "Woonkamer klimaat te droog"
-        state: >
-          {% set RH = states('sensor.woonkamer4in1_luchtvochtigheid')|float(0) %}
-          {{ RH <= 35 }}
-        delay_on: "01:00:00"
-        delay_off: "00:30:00"
 
 tts:
   - platform: google_translate

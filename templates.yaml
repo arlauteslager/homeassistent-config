@@ -1,0 +1,267 @@
+  - binary_sensor:
+      - name: "Donker buiten"
+        unique_id: donker_buiten
+        state: >
+          {{ state_attr('sun.sun', 'elevation') is not none
+             and (state_attr('sun.sun', 'elevation') | float) < 5 }}
+
+  - binary_sensor:
+      - name: "Marjolein thuis"
+        unique_id: marjolein_thuis
+        device_class: presence
+        state: >
+          {{ is_state('device_tracker.iphone_15_marjolein', 'home') }}
+
+  - binary_sensor:
+      - name: "Arnaud thuis"
+        unique_id: arnaud_thuis
+        device_class: presence
+        state: >
+          {{ is_state('device_tracker.iphone13arnaud', 'home') }}
+
+# op WO,DO,VRIJ bewoond. Op de andere dagen check of iphone_vandaag gezien waar is
+      - name: "Bewoond"
+        unique_id: bewoond
+        state: >
+          {% if states('input_boolean.vakantie') == 'on' %}
+            false
+          {% else %}
+            {% set dow = now().weekday() %}  {# maandag=0, zondag=6 #}
+
+            {# Woensdag (2) t/m vrijdag (4): altijd bewoond #}
+            {% if 2 <= dow <= 4 %}
+              true
+            {% else %}
+              {{ states('input_boolean.iphone_vandaag_gezien') == 'on' }}
+            {% endif %}
+          {% endif %}
+         
+  - sensor:
+      - name: "Boiler opwarmtijd resterend"
+        unique_id: boiler_opwarmtijd_resterend
+        unit_of_measurement: "s"
+        state: >
+          {% set finish_time = state_attr('timer.boiler_opwarmtijd', 'finishes_at') %}
+          {% if finish_time %}
+            {{ max(0, (as_timestamp(finish_time) - as_timestamp(now())) | int) }}
+          {% else %}
+            0
+          {% endif %}
+        attributes:
+          friendly_time: >
+            {% set secs = states('sensor.boiler_opwarmtijd_resterend') | int(0) %}
+            {{ (secs | timestamp_custom('%H:%M:%S', true)) }}
+        icon: mdi:timer
+
+  - sensor:
+      - name: "knmi_weerbericht_utrecht"
+        state: "ready"
+        attributes:
+          full_text: >-
+            {% set actual = state_attr('sensor.knmi_data_utrecht', 'actual') %}
+            {% set forecast = state_attr('sensor.knmi_data_utrecht', 'forecast') %}
+            {% if actual is not none and actual.stationmeasurements is defined %}
+              {% set stations = actual.stationmeasurements %}
+              {% set debilt_list = stations
+                  | selectattr('stationid', 'equalto', 6260)
+                  | list %}
+              {% if debilt_list | length > 0 %}
+                {% set s = debilt_list[0] %}
+
+                {% set temp     = s.temperature        | float(0) %}
+                {% set feel     = s.feeltemperature    | float(0) %}
+                {% set winddir  = s.winddirection      | default('onbekende richting') %}
+                {% set bft      = s.windspeedBft       | default('?') %}
+                {% set desc     = s.weatherdescription | default('') %}
+                {% set precip   = s.precipitation      | float(0) %}
+                {% set rain1h   = s.rainFallLastHour   | float(0) %}
+                {% set rain24h  = s.rainFallLast24Hour | float(0) %}
+
+                {%- set now_rain_sentence -%}
+                  {%- if precip > 0 -%}
+                    Op dit moment valt er neerslag, ongeveer {{ '%.1f'|format(precip) }} millimeter per uur.
+                  {%- else -%}
+                    Op dit moment is het droog.
+                  {%- endif -%}
+                {%- endset -%}
+
+                {%- set history_sentence -%}
+                  {%- if rain1h > 0 and rain24h > 0 -%}
+                    In het afgelopen uur is er {{ '%.1f'|format(rain1h) }} millimeter gevallen
+                    en in de afgelopen 24 uur in totaal {{ '%.1f'|format(rain24h) }} millimeter.
+                  {%- elif rain24h > 0 -%}
+                    In de afgelopen 24 uur is er {{ '%.1f'|format(rain24h) }} millimeter gevallen.
+                  {%- else -%}
+                    Er is de afgelopen 24 uur nauwelijks neerslag gevallen.
+                  {%- endif -%}
+                {%- endset -%}
+
+                {%- set forecast_sentence -%}
+                  {%- if forecast is not none
+                        and forecast.fivedayforecast is defined
+                        and (forecast.fivedayforecast | length) > 0 -%}
+                    {%- set today_fc = forecast.fivedayforecast[0] -%}
+                    {%- set rainChance = today_fc.rainChance   | default(0) -%}
+                    {%- set mmMin      = today_fc.mmRainMin    | default(0) -%}
+                    {%- set mmMax      = today_fc.mmRainMax    | default(0) -%}
+                    {%- if rainChance|int > 0 -%}
+                      De kans op regen vandaag is ongeveer {{ rainChance }} procent,
+                      met tussen {{ mmMin }} en {{ mmMax }} millimeter neerslag verwacht.
+                    {%- else -%}
+                      Voor vandaag wordt weinig neerslag verwacht.
+                    {%- endif -%}
+                  {%- endif -%}
+                {%- endset -%}
+
+                Het is nu {{ temp|round(1) }} graden in regio Utrecht,
+                met een gevoelstemperatuur van {{ feel|round(1) }} graden.
+                De wind komt uit het {{ winddir }} en heeft een kracht van {{ bft }} Beaufort.
+                {{ desc|capitalize }}.
+                {{ now_rain_sentence }}
+                {{ history_sentence }}
+                {{ forecast_sentence }}
+              {% else %}
+                Geen weergegevens gevonden voor De Bilt.
+              {% endif %}
+            {% else %}
+              Het weerbericht voor Utrecht is momenteel niet beschikbaar.
+            {% endif %}
+
+  - sensor:
+    - name: "knmi_weerbericht_algemeen"
+      state: "ready"
+      attributes:
+        weatherreport_title: >-
+          {% set fc = state_attr('sensor.knmi_data_utrecht', 'forecast') %}
+          {% if fc is not none and fc.weatherreport is defined %}
+            {{ fc.weatherreport.title | default('') }}
+          {% else %}{{ '' }}{% endif %}
+
+        weatherreport_author: >-
+          {% set fc = state_attr('sensor.knmi_data_utrecht', 'forecast') %}
+          {% if fc is not none and fc.weatherreport is defined %}
+            {{ fc.weatherreport.author | default('') }}
+          {% else %}{{ '' }}{% endif %}
+
+        weatherreport_summary: >-
+          {% set fc = state_attr('sensor.knmi_data_utrecht', 'forecast') %}
+          {% if fc is not none and fc.weatherreport is defined %}
+            {{ fc.weatherreport.summary | default('') }}
+          {% else %}{{ '' }}{% endif %}
+
+        weatherreport_text: >-
+          {% set fc = state_attr('sensor.knmi_data_utrecht', 'forecast') %}
+          {% if fc is not none and fc.weatherreport is defined %}
+            {{ fc.weatherreport.text | default('') }}
+          {% else %}{{ '' }}{% endif %}
+
+        shortterm_text: >-
+          {% set fc = state_attr('sensor.knmi_data_utrecht', 'forecast') %}
+          {% if fc is not none and fc.shortterm is defined %}
+            {{ fc.shortterm.forecast | default('') }}
+          {% else %}{{ '' }}{% endif %}
+
+        shortterm_period: >-
+          {% set fc = state_attr('sensor.knmi_data_utrecht', 'forecast') %}
+          {% if fc is not none and fc.shortterm is defined %}
+            {{ (fc.shortterm.startdate | default('')) ~ ' → ' ~ (fc.shortterm.enddate | default('')) }}
+          {% else %}{{ '' }}{% endif %}
+
+        longterm_text: >-
+          {% set fc = state_attr('sensor.knmi_data_utrecht', 'forecast') %}
+          {% if fc is not none and fc.longterm is defined %}
+            {{ fc.longterm.forecast | default('') }}
+          {% else %}{{ '' }}{% endif %}
+
+        longterm_period: >-
+          {% set fc = state_attr('sensor.knmi_data_utrecht', 'forecast') %}
+          {% if fc is not none and fc.longterm is defined %}
+            {{ (fc.longterm.startdate | default('')) ~ ' → ' ~ (fc.longterm.enddate | default('')) }}
+          {% else %}{{ '' }}{% endif %}
+
+        full_text: >-
+          {% set fc = state_attr('sensor.knmi_data_utrecht', 'forecast') %}
+          {% if fc is none %}
+            Het algemene weerbericht is momenteel niet beschikbaar.
+          {% else %}
+            {%- set parts = [] -%}
+
+            {%- if fc.weatherreport is defined -%}
+              {%- set wr = fc.weatherreport -%}
+              {%- set title = wr.title | default('') -%}
+              {%- set summary = wr.summary | default('') -%}
+              {%- set author = wr.author | default('') -%}
+              {%- set text = wr.text | default('') -%}
+
+              {%- if title or summary or text -%}
+                {%- set wr_line = "Weerbericht" -%}
+                {%- if title %}{%- set wr_line = wr_line ~ ": " ~ title -%}{%- endif -%}
+                {%- if summary %}{%- set wr_line = wr_line ~ ". " ~ summary -%}{%- endif -%}
+                {%- if author %}{%- set wr_line = wr_line ~ " (bron: " ~ author ~ ")" -%}{%- endif -%}
+                {%- set parts = parts + [wr_line] -%}
+
+                {%- if text -%}
+                  {%- set parts = parts + [text] -%}
+                {%- endif -%}
+              {%- endif -%}
+            {%- endif -%}
+
+            {%- if fc.shortterm is defined -%}
+              {%- set st = fc.shortterm -%}
+              {%- set st_text = st.forecast | default('') -%}
+              {%- if st_text -%}
+                {%- set parts = parts + ["Korte termijn: " ~ st_text] -%}
+              {%- endif -%}
+            {%- endif -%}
+
+            {%- if fc.longterm is defined -%}
+              {%- set lt = fc.longterm -%}
+              {%- set lt_text = lt.forecast | default('') -%}
+              {%- if lt_text -%}
+                {%- set parts = parts + ["Lange termijn: " ~ lt_text] -%}
+              {%- endif -%}
+            {%- endif -%}
+
+            {%- if parts | length > 0 -%}
+              {{ parts | join('\n\n') }}
+            {%- else -%}
+              Het algemene weerbericht is momenteel leeg of niet beschikbaar.
+            {%- endif -%}
+          {% endif %}
+
+
+  - sensor:
+      - name: "Woonkamer dauwpunt"
+        unit_of_measurement: "°C"
+        state: >
+          {% set T = states('sensor.woonkamer4in1_temperatuur')|float(0) %}
+          {% set RH = states('sensor.woonkamer4in1_luchtvochtigheid')|float(0) %}
+          {% set a = 17.62 %}
+          {% set b = 243.12 %}
+          {% set gamma = (RH/100) | log + (a*T)/(b+T) %}
+          {% set Td = (b*gamma)/(a-gamma) %}
+          {{ Td | round(2) }}
+
+      - name: "Woonkamer dauwpuntverschil"
+        unit_of_measurement: "°C"
+        state: >
+          {% set T = states('sensor.woonkamer4in1_temperatuur')|float(0) %}
+          {% set Td = states('sensor.woonkamer_dauwpunt')|float(0) %}
+          {{ (T - Td) | round(2) }}
+
+  - binary_sensor:
+      - name: "Woonkamer klimaat te vochtig"
+        state: >
+          {% set T = states('sensor.woonkamer4in1_temperatuur')|float(0) %}
+          {% set RH = states('sensor.woonkamer4in1_luchtvochtigheid')|float(0) %}
+          {% set d = states('sensor.woonkamer_dauwpuntverschil')|float(99) %}
+          {{ (d <= 4) or (T <= 16 and d <= 5) or (T <= 16 and RH >= 65) }}
+        delay_on: "00:30:00"
+        delay_off: "00:20:00"
+
+      - name: "Woonkamer klimaat te droog"
+        state: >
+          {% set RH = states('sensor.woonkamer4in1_luchtvochtigheid')|float(0) %}
+          {{ RH <= 35 }}
+        delay_on: "01:00:00"
+        delay_off: "00:30:00"

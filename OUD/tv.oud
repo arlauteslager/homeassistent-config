@@ -1,5 +1,5 @@
 - id: 'switch_off_daily_0015_except_jan1'
-  alias: Switch uit om 00:15 (behalve op 1 januari)
+  alias: Switch uit om 00:25 (behalve op 1 januari)
   trigger:
     - platform: time
       at: '00:25:00'
@@ -21,7 +21,7 @@
   alias: TV-stopcontact aan bij beweging binnen tijdsvensters
   trigger:
     - platform: state
-      entity_id: binary_sensor.bewegingssensor_beweging
+      entity_id: binary_sensor.woonkamer4in1
       to: 'on'
   condition:
     - condition: or
@@ -66,17 +66,6 @@
     - service: switch.turn_on
       target:
         entity_id: switch.tv_stopcontact_1
-    # 1) Altijd zichtbaar (belletje rechtsboven)
-    #- service: persistent_notification.create
-    #  data:
-    #    title: "TEST tv"
-    #    message: "Aangezet door beweging  ({{ now() }})"
-
-    # (optioneel) logje in Logboek
-    - service: logbook.log
-      data:
-        name: "TV-stopcontact"
-        message: "Aangezet door beweging binnen venster ({{ now() }})"
         
   mode: single
   

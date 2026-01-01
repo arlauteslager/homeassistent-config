@@ -2,7 +2,6 @@
   trigger:
     - platform: time
       at: "06:00:00"
-#      at: "17:32:00"
   action:
     - service: switch.turn_off
       target:
