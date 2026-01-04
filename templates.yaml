@@ -235,10 +235,11 @@
         unit_of_measurement: "°C"
         state: >
           {% set T = states('sensor.woonkamer4in1_temperatuur')|float(0) %}
-          {% set RH = states('sensor.woonkamer4in1_luchtvochtigheid')|float(0) %}
+          {% set RH_raw = states('sensor.woonkamer4in1_luchtvochtigheid')|float(0) %}
+          {% set RH = [RH_raw, 0.1] | max %}   {# voorkom 0% -> log(0) #}
           {% set a = 17.62 %}
           {% set b = 243.12 %}
-          {% set gamma = (RH/100) | log + (a*T)/(b+T) %}
+          {% set gamma = ((RH/100) | log) + (a*T)/(b+T) %}
           {% set Td = (b*gamma)/(a-gamma) %}
           {{ Td | round(2) }}
 
