@@ -3,35 +3,50 @@
 from datetime import datetime, time
 
 MINUTEN = 15
-_timer = None
+_task = None
+_token = 0
 
 
-def _reset_timer():
-    global _timer
+def _start_timer():
+    global _task, _token
+    _token += 1
+    my = _token
 
-    if _timer is not None:
+    if _task is not None:
         try:
-            task.cancel(_timer)
+            task.cancel(_task)
         except Exception:
             pass
-        _timer = None
+        _task = None
 
-    async def _wacht_en_uit():
+    async def _run():
         await task.sleep(MINUTEN * 60)
+        if my != _token:
+            return
         if state.get("light.verlichting_hal") == "on":
             service.call("light", "turn_off", entity_id="light.verlichting_hal")
 
-    _timer = task.create(_wacht_en_uit())
+    _task = task.create(_run())
 
 
-def _hal_aan_en_timer():
+def _activity():
+    global _task, _token
+
     if state.get("binary_sensor.donker_buiten") != "on":
         return
 
     if state.get("light.verlichting_hal") != "on":
         service.call("light", "turn_on", entity_id="light.verlichting_hal")
 
-    _reset_timer()
+    # invalideer alle oudere timers (ook als cancel faalt)
+    _token += 1
+
+    if _task is not None:
+        try:
+            task.cancel(_task)
+        except Exception:
+            pass
+        _task = None
 
 
 @state_trigger(
@@ -40,7 +55,7 @@ def _hal_aan_en_timer():
     "binary_sensor.voorkamerdeur == 'on'"
 )
 def _hal_deuren():
-    _hal_aan_en_timer()
+    _activity()
 
 
 @state_trigger("binary_sensor.overloop4in1 == 'on'")
@@ -48,5 +63,16 @@ def _overloop():
     t = datetime.now().time()
     if not (time(7, 0) <= t <= time(23, 59, 59)):
         return
+    _activity()
 
-    _hal_aan_en_timer()
+
+@state_trigger(
+    "binary_sensor.sensor_hal == 'off' or "
+    "binary_sensor.voordeur == 'off' or "
+    "binary_sensor.voorkamerdeur == 'off' or "
+    "binary_sensor.overloop4in1 == 'off'"
+)
+def _off_events_start_timer():
+    # Alleen timer starten als het licht aan staat; uit gebeurt na MINUTEN zonder nieuwe 'on'
+    if state.get("light.verlichting_hal") == "on":
+        _start_timer()

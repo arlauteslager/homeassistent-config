@@ -1,28 +1,42 @@
 # /config/pyscript/voordeur_verlichting.py
 #
 # - AAN bij activiteit (hal / voordeur / voorkamerdeur) als donker buiten
-# - UIT na 15 min zonder activiteit (timer reset bij nieuwe activiteit)
+# - UIT na 15 min zonder activiteit
+# - Robuust tegen:
+#   * spanningsloze lamp (unavailable)
+#   * oude timers (token-guard)
 
 MINUTEN = 15
-_timer = None
+_task = None
+_token = 0
 
 
-def _reset_timer():
-    global _timer
+def _light_state_ok():
+    return state.get("light.lamp_voordeur") in ("on", "off")
 
-    if _timer is not None:
+
+def _start_timer():
+    global _task, _token
+    _token += 1
+    my = _token
+
+    if _task is not None:
         try:
-            task.cancel(_timer)
+            task.cancel(_task)
         except Exception:
             pass
-        _timer = None
+        _task = None
 
-    async def _wacht_en_uit():
+    async def _run():
         await task.sleep(MINUTEN * 60)
+        if my != _token:
+            return
+        if not _light_state_ok():
+            return
         if state.get("light.lamp_voordeur") == "on":
             service.call("light", "turn_off", entity_id="light.lamp_voordeur")
 
-    _timer = task.create(_wacht_en_uit())
+    _task = task.create(_run())
 
 
 @state_trigger(
@@ -31,10 +45,23 @@ def _reset_timer():
     "binary_sensor.voorkamerdeur == 'on'"
 )
 def _activiteit():
+    global _task, _token
+
     if state.get("binary_sensor.donker_buiten") != "on":
+        return
+
+    if not _light_state_ok():
         return
 
     if state.get("light.lamp_voordeur") != "on":
         service.call("light", "turn_on", entity_id="light.lamp_voordeur")
 
-    _reset_timer()
+    _token += 1
+    if _task is not None:
+        try:
+            task.cancel(_task)
+        except Exception:
+            pass
+        _task = None
+
+    _start_timer()
