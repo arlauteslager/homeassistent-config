@@ -266,3 +266,62 @@
           {{ RH <= 35 }}
         delay_on: "01:00:00"
         delay_off: "00:30:00"
+
+
+  - trigger:
+    # Herbereken bij nieuwe meetwaarden
+    - platform: state
+      entity_id:
+        - sensor.woonkamerklimaat_temperatuur
+        - sensor.woonkamerklimaat_luchtvochtigheid
+
+    # En als vangnet: herbereken elke 5 minuten
+    - platform: time_pattern
+      minutes: "/5"
+
+  - sensor:
+    - name: Woonkamer absolute vochtigheid
+      unique_id: woonkamer_absolute_vochtigheid
+      unit_of_measurement: "g/m³"
+      state: >
+        {% set T = states('sensor.woonkamer4in1_temperatuur')|float(none) %}
+        {% set RH = states('sensor.woonkamer4in1_luchtvochtigheid')|float(none) %}
+        {% if T is none or RH is none %}
+          {{ none }}
+        {% else %}
+          {# Saturation vapor pressure (hPa) #}
+          {% set es = 6.112 * (2.718281828 ** ((17.67*T)/(T+243.5))) %}
+          {# Actual vapor pressure (hPa) #}
+          {% set e = (RH/100) * es %}
+          {# Absolute humidity (g/m³) #}
+          {{ (216.7 * (e / (T + 273.15))) | round(2) }}
+        {% endif %}
+
+    - name: Woonkamer vochtcomfort score
+      unique_id: woonkamer_vochtcomfort_score
+      unit_of_measurement: "%"
+      state: >
+        {% set T = states('sensor.woonkamer4in1_temperatuur')|float(none) %}
+        {% set RH = states('sensor.woonkamer4in1_luchtvochtigheid')|float(none) %}
+        {% if T is none or RH is none %}
+          {{ none }}
+        {% else %}
+          {# Bereken absolute vochtigheid nogmaals zodat deze sensor zelfstandig is #}
+          {% set es = 6.112 * (2.718281828 ** ((17.67*T)/(T+243.5))) %}
+          {% set e = (RH/100) * es %}
+          {% set AH = (216.7 * (e / (T + 273.15))) %}
+
+          {# Comfortband (startpunt): 7.5–10 g/m³ #}
+          {% set lo = 7.5 %}
+          {% set hi = 10.0 %}
+          {# Hoe snel score afloopt buiten band: na 4 g/m³ buiten band -> 0% #}
+          {% set margin = 4.0 %}
+
+          {% if lo <= AH <= hi %}
+            100
+          {% elif AH < lo %}
+            {{ (100 * max(0, 1 - (lo - AH)/margin)) | round(0) }}
+          {% else %}
+            {{ (100 * max(0, 1 - (AH - hi)/margin)) | round(0) }}
+          {% endif %}
+        {% endif %}

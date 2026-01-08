@@ -63,4 +63,3 @@ def _periodic():
 @time_trigger("cron(40 22 * * *)")
 def _cutoff():
     _apply("cutoff_2240")
-

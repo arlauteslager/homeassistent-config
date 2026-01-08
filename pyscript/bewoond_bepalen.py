@@ -1,7 +1,7 @@
 # /config/pyscript/bewoond_bepalen.py
 #
 # Dag-latch: iphone_vandaag_gezien
-# - Reset om 06:00
+# - Reset om 06:50
 # - Vanaf 11:00 latch aan als iPhone thuis is (niet tijdens vakantie)
 # - Vakantie aan: latch altijd uit
 
@@ -29,7 +29,7 @@ def _om_11u():
     _eval()
 
 
-@time_trigger("cron(0 6 * * *)")
+@time_trigger("cron(50 6 * * *)")
 def _reset_6u():
     service.call("input_boolean", "turn_off", entity_id="input_boolean.iphone_vandaag_gezien")
 
