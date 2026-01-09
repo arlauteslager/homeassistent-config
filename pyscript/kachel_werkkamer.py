@@ -1,9 +1,4 @@
 # /config/pyscript/kachel_werkkamer_auto_uit.py
-#
-# Doel:
-# - Als Arnaud thuis -> off (niet thuis),
-#   en de kachel in de werkkamer staat nog aan,
-#   zet die dan uit + maak een persistent notification.
 
 @state_trigger("binary_sensor.arnaud_thuis == 'off'")
 def kachel_werkkamer_uit_als_arnaud_vertrekt():
@@ -19,4 +14,5 @@ def kachel_werkkamer_uit_als_arnaud_vertrekt():
         message="Arnaud is niet thuis: kachel werkkamer uitgezet.",
     )
 
-    log.info("[kachel_werkkamer] Arnaud niet thuis -> kachel uitgezet + notification")
+    log.warning("[kachel_werkkamer] Arnaud niet thuis -> kachel uitgezet + pushmelding")
+

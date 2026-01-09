@@ -267,18 +267,6 @@
         delay_on: "01:00:00"
         delay_off: "00:30:00"
 
-
-  - trigger:
-    # Herbereken bij nieuwe meetwaarden
-    - platform: state
-      entity_id:
-        - sensor.woonkamerklimaat_temperatuur
-        - sensor.woonkamerklimaat_luchtvochtigheid
-
-    # En als vangnet: herbereken elke 5 minuten
-    - platform: time_pattern
-      minutes: "/5"
-
   - sensor:
     - name: Woonkamer absolute vochtigheid
       unique_id: woonkamer_absolute_vochtigheid
