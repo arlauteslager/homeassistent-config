@@ -32,17 +32,17 @@ def _apply(ctx: str):
     else:
         desired_on = donker_buiten and (not donker_binnen)
 
-    log.warning(
-        "[lamp_voorkamer] %s | bewoond=%s | donker_buiten=%s | lux=%s | donker_binnen=%s | tijd=%s | desired_on=%s | current=%s",
-        ctx,
-        state.get("binary_sensor.bewoond"),
-        state.get("binary_sensor.donker_buiten"),
-        state.get("sensor.woonkamer4in1_licht"),
-        donker_binnen,
-        t.strftime("%H:%M:%S"),
-        desired_on,
-        state.get("switch.stekker_lamp_voorkamer"),
-    )
+    # log.warning(
+    #     "[lamp_voorkamer] %s | bewoond=%s | donker_buiten=%s | lux=%s | donker_binnen=%s | tijd=%s | desired_on=%s | current=%s",
+    #     ctx,
+    #     state.get("binary_sensor.bewoond"),
+    #     state.get("binary_sensor.donker_buiten"),
+    #     state.get("sensor.woonkamer4in1_licht"),
+    #     donker_binnen,
+    #     t.strftime("%H:%M:%S"),
+    #     desired_on,
+    #     state.get("switch.stekker_lamp_voorkamer"),
+    #)
 
     _set(desired_on)
 
