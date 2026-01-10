@@ -2,10 +2,10 @@
 
 @state_trigger("binary_sensor.arnaud_thuis == 'off'")
 def kachel_werkkamer_uit_als_arnaud_vertrekt():
-    if state.get("switch.kachel_werkkamer_socket_1") != "on":
+    if state.get("switch.kachel_werkkamer_stopcontact_1") != "on":
         return
 
-    service.call("switch", "turn_off", entity_id="switch.kachel_werkkamer_socket_1")
+    service.call("switch", "turn_off", entity_id="switch.kachel_werkkamer_stopcontact_1")
 
     service.call(
         "notify",
@@ -15,4 +15,3 @@ def kachel_werkkamer_uit_als_arnaud_vertrekt():
     )
 
     log.warning("[kachel_werkkamer] Arnaud niet thuis -> kachel uitgezet + pushmelding")
-

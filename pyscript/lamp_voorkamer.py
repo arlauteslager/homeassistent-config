@@ -6,7 +6,7 @@
 #   - avond: vanaf zonsondergang t/m 22:40 aan als het NIET "echt donker" binnen is (lux >= 10),
 #           uit zodra het "echt donker" is (lux < 10)
 #   - ochtend: vanaf 07:00 t/m zonsopgang:
-#       - aan wanneer beweging
+#       - aan wanneer beweging gedetecteerd
 #       - uit 20 min na geen beweging
 #
 # Entities:
@@ -42,7 +42,7 @@ def _apply(ctx=""):
 
     if not bewoond:
         # NIET BEWOOND: start exact op sunset+1h (via trigger), daarna aan tot cutoff
-        # Overdag niets doen
+        # Overdag: uit
         if evening:
             _set(True)
         else:
@@ -51,13 +51,13 @@ def _apply(ctx=""):
 
     # BEWOOND
     if morning:
-        # motion regelt aan/uit (uit via delay-trigger)
+        # Ochtend: aan bij beweging; uit gaat via motion_off trigger met delay
         if motion:
             _set(True)
         return
 
     if evening:
-        # avond: aan zolang lux >= 10, uit zodra lux < 10
+        # Avond: aan zolang lux >= 10; uit zodra lux < 10
         try:
             lux = float(state.get("sensor.woonkamer4in1_licht"))
         except (TypeError, ValueError):
@@ -65,43 +65,4 @@ def _apply(ctx=""):
         _set(lux >= 10.0)
         return
 
-    # overdag: uit
-    _set(False)
-
-# --- Triggers ---
-
-# NIET BEWOOND: start exact op sunset+1h
-@time_trigger("sunset + 01:00")
-def t_sunset_plus1():
-    if state.get("binary_sensor.bewoond") == "off":
-        _set(True)
-
-# Bewoond: avond start (sunset) -> ga lux-regel toepassen
-@time_trigger("sunset")
-def t_sunset():
-    _apply("sunset")
-
-# Ochtend start
-@time_trigger("cron(0 7 * * *)")
-def t_0700():
-    _apply("0700")
-
-# Einde ochtend / start dag
-@time_trigger("sunrise")
-def t_sunrise():
-    _apply("sunrise")
-
-# Hard cutoff
-@time_trigger("cron(40 22 * * *)")
-def t_cutoff():
-    _set(False)
-
-# Bewoond wisselt
-@state_trigger("binary_sensor.bewoond == 'on' or binary_sensor.bewoond == 'off'")
-def bewoond_change():
-    _apply("bewoond_change")
-
-# Lux verandert (alleen relevant in bewoonde avond)
-@state_trigger("sensor.woonkamer4in1_licht")
-def lux_change():
-    if state.get("binary_sensor.bewoond") ==_
+    # Overdag: uit
