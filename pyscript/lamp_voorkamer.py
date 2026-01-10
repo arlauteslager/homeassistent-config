@@ -1,65 +1,107 @@
 # /config/pyscript/lamp_voorkamer.py
 #
 # Regels:
-# - NIET BEWOOND: aan als donker buiten én vóór 22:40
-# - BEWOOND: aan als donker buiten én NIET donker binnen (lux >= 10)
-# Triggers: bewoond/donker_buiten changes, elke 10 min als donker, 22:40
+# - NIET BEWOOND: in de avond 1 uur na zonsondergang t/m 22:40 lamp aan
+# - BEWOOND:
+#   - avond: vanaf zonsondergang t/m 22:40 aan als het NIET "echt donker" binnen is (lux >= 10),
+#           uit zodra het "echt donker" is (lux < 10)
+#   - ochtend: vanaf 07:00 t/m zonsopgang:
+#       - aan wanneer beweging
+#       - uit 20 min na geen beweging
+#
+# Entities:
+# - switch.stekker_lamp_voorkamer
+# - binary_sensor.bewoond
+# - sensor.woonkamer4in1_licht
+# - binary_sensor.woonkamer4in1  (beweging)
 
 from datetime import datetime, time
 
-def _lux():
-    try:
-        return float(state.get("sensor.woonkamer4in1_licht"))
-    except (TypeError, ValueError):
-        return 9999.0
-
-def _set(desired_on: bool):
+def _set(on):
     cur = state.get("switch.stekker_lamp_voorkamer")
-    if desired_on and cur != "on":
+    if on and cur != "on":
         service.call("switch", "turn_on", entity_id="switch.stekker_lamp_voorkamer")
-    elif (not desired_on) and cur != "off":
+    elif (not on) and cur != "off":
         service.call("switch", "turn_off", entity_id="switch.stekker_lamp_voorkamer")
 
-def _apply(ctx: str):
-    bewoond = (state.get("binary_sensor.bewoond") == "on")
-    donker_buiten = (state.get("binary_sensor.donker_buiten") == "on")
-    t = datetime.now().time()
-    lux = _lux()
-    donker_binnen = lux < 10.0
+def _apply(ctx=""):
+    bewoond = state.get("binary_sensor.bewoond") == "on"
+    motion = state.get("binary_sensor.woonkamer4in1") == "on"
+    now = datetime.now()
+    t = now.time()
+
+    # hard cutoff altijd
+    if t >= time(22, 40):
+        _set(False)
+        return
+
+    # ochtend: 07:00 -> zonsopgang (zon onder horizon)
+    morning = (t >= time(7, 0) and state.get("sun.sun") == "below_horizon")
+    # avond: na zonsondergang (zon onder horizon)
+    evening = (state.get("sun.sun") == "below_horizon")
 
     if not bewoond:
-        desired_on = donker_buiten and (t < time(22, 40))
-    else:
-        desired_on = donker_buiten and (not donker_binnen)
+        # NIET BEWOOND: start exact op sunset+1h (via trigger), daarna aan tot cutoff
+        # Overdag niets doen
+        if evening:
+            _set(True)
+        else:
+            _set(False)
+        return
 
-    # log.warning(
-    #     "[lamp_voorkamer] %s | bewoond=%s | donker_buiten=%s | lux=%s | donker_binnen=%s | tijd=%s | desired_on=%s | current=%s",
-    #     ctx,
-    #     state.get("binary_sensor.bewoond"),
-    #     state.get("binary_sensor.donker_buiten"),
-    #     state.get("sensor.woonkamer4in1_licht"),
-    #     donker_binnen,
-    #     t.strftime("%H:%M:%S"),
-    #     desired_on,
-    #     state.get("switch.stekker_lamp_voorkamer"),
-    #)
+    # BEWOOND
+    if morning:
+        # motion regelt aan/uit (uit via delay-trigger)
+        if motion:
+            _set(True)
+        return
 
-    _set(desired_on)
+    if evening:
+        # avond: aan zolang lux >= 10, uit zodra lux < 10
+        try:
+            lux = float(state.get("sensor.woonkamer4in1_licht"))
+        except (TypeError, ValueError):
+            lux = 9999.0
+        _set(lux >= 10.0)
+        return
 
+    # overdag: uit
+    _set(False)
 
+# --- Triggers ---
+
+# NIET BEWOOND: start exact op sunset+1h
+@time_trigger("sunset + 01:00")
+def t_sunset_plus1():
+    if state.get("binary_sensor.bewoond") == "off":
+        _set(True)
+
+# Bewoond: avond start (sunset) -> ga lux-regel toepassen
+@time_trigger("sunset")
+def t_sunset():
+    _apply("sunset")
+
+# Ochtend start
+@time_trigger("cron(0 7 * * *)")
+def t_0700():
+    _apply("0700")
+
+# Einde ochtend / start dag
+@time_trigger("sunrise")
+def t_sunrise():
+    _apply("sunrise")
+
+# Hard cutoff
+@time_trigger("cron(40 22 * * *)")
+def t_cutoff():
+    _set(False)
+
+# Bewoond wisselt
 @state_trigger("binary_sensor.bewoond == 'on' or binary_sensor.bewoond == 'off'")
-def _bewoond():
+def bewoond_change():
     _apply("bewoond_change")
 
-@state_trigger("binary_sensor.donker_buiten == 'on' or binary_sensor.donker_buiten == 'off'")
-def _donker_buiten():
-    _apply("donker_buiten_change")
-
-@time_trigger("cron(*/10 * * * *)")
-def _periodic():
-    if state.get("binary_sensor.donker_buiten") == "on":
-        _apply("periodic_dark")
-
-@time_trigger("cron(40 22 * * *)")
-def _cutoff():
-    _apply("cutoff_2240")
+# Lux verandert (alleen relevant in bewoonde avond)
+@state_trigger("sensor.woonkamer4in1_licht")
+def lux_change():
+    if state.get("binary_sensor.bewoond") ==_
