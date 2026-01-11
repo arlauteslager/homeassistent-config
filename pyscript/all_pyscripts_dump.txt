@@ -1,0 +1,845 @@
+
+===== /config/pyscript/bewoond_bepalen.py =====
+
+# /config/pyscript/bewoond_bepalen.py
+#
+# Dag-latch: iphone_vandaag_gezien
+# - Reset om 06:50
+# - Vanaf 11:00 latch aan als iPhone thuis is (niet tijdens vakantie)
+# - Vakantie aan: latch altijd uit
+
+from datetime import datetime, time as dtime
+
+def _eval():
+    if state.get("input_boolean.vakantie") == "on":
+        return
+
+    if datetime.now().time() < dtime(11, 0):
+        return
+
+    if state.get("device_tracker.iphone13arnaud") == "home" and state.get("input_boolean.iphone_vandaag_gezien") != "on":
+        service.call("input_boolean", "turn_on", entity_id="input_boolean.iphone_vandaag_gezien")
+
+
+@state_trigger("device_tracker.iphone13arnaud")
+def _iphone_change():
+    if state.get("device_tracker.iphone13arnaud") == "home":
+        _eval()
+
+
+@time_trigger("cron(0 11 * * *)")
+def _om_11u():
+    _eval()
+
+
+@time_trigger("cron(50 6 * * *)")
+def _reset_6u():
+    service.call("input_boolean", "turn_off", entity_id="input_boolean.iphone_vandaag_gezien")
+
+
+@state_trigger("input_boolean.vakantie == 'on'")
+def _vakantie_on():
+    service.call("input_boolean", "turn_off", entity_id="input_boolean.iphone_vandaag_gezien")
+
+
+@state_trigger("input_boolean.vakantie == 'off'")
+def _vakantie_off():
+    _eval()
+
+===== /config/pyscript/boiler.py =====
+
+# /config/pyscript/boiler_regeling.py
+#
+# - Aan bij overschot: P1 < -1100 (edge) + bewoond + dagbudget nog niet op + timer staat paused + boiler is uit
+# - Uit bij teveel net-afname: P1 > 1200 (edge) vóór 16:00 + boiler is aan
+# - Max 30 min/dag via timer (reset 06:00)
+# - Geforceerde run wo–zo 16:00 (15 min)
+# - Bij HA-start 1x her-evalueren (zonder logspam)
+
+from datetime import datetime, time
+
+AAN_BIJ_OVERSCHOT_W = -1100
+UIT_BIJ_NETAFNAME_W = 1200
+DAG_TIMER = "00:30:00"
+
+# --------- Edge triggers (geen spam) ---------
+
+@state_trigger(
+    f"float(sensor.p1_meter_power) < {AAN_BIJ_OVERSCHOT_W} and "
+    f"sensor.p1_meter_power.old is not None and "
+    f"float(sensor.p1_meter_power.old) >= {AAN_BIJ_OVERSCHOT_W}"
+)
+def _aan_edge():
+    if state.get("binary_sensor.bewoond") != "on":
+        return
+    if state.get("input_boolean.boiler_al_verwarmd") != "off":
+        return
+    if state.get("switch.boiler_stopcontact_1") != "off":
+        return
+    if state.get("timer.boiler_opwarmtijd") != "paused":
+        return
+
+    service.call("switch", "turn_on", entity_id="switch.boiler_stopcontact_1")
+    service.call("timer", "start", entity_id="timer.boiler_opwarmtijd")
+
+
+@state_trigger(
+    f"float(sensor.p1_meter_power) > {UIT_BIJ_NETAFNAME_W} and "
+    f"sensor.p1_meter_power.old is not None and "
+    f"float(sensor.p1_meter_power.old) <= {UIT_BIJ_NETAFNAME_W}"
+)
+def _uit_edge():
+    if state.get("switch.boiler_stopcontact_1") != "on":
+        return
+    if datetime.now().time() >= time(16, 0):
+        return
+
+    if state.get("timer.boiler_opwarmtijd") == "active":
+        service.call("timer", "pause", entity_id="timer.boiler_opwarmtijd")
+    elif state.get("timer.boiler_opwarmtijd") == "idle":
+        service.call("input_boolean", "turn_on", entity_id="input_boolean.boiler_al_verwarmd")
+
+    service.call("switch", "turn_off", entity_id="switch.boiler_stopcontact_1")
+
+
+# --------- Reset / timers ---------
+
+@time_trigger("cron(0 6 * * *)")
+async def _reset_0600():
+    service.call("switch", "turn_off", entity_id="switch.boiler_stopcontact_1")
+    await task.sleep(2)
+    service.call("input_boolean", "turn_off", entity_id="input_boolean.boiler_al_verwarmd")
+    service.call("timer", "start", entity_id="timer.boiler_opwarmtijd", duration=DAG_TIMER)
+    await task.sleep(1)
+    service.call("timer", "pause", entity_id="timer.boiler_opwarmtijd")
+
+
+@event_trigger("timer.finished")
+def _timer_klaar(event_name=None, data=None, kwargs=None):
+    if (data or {}).get("entity_id") != "timer.boiler_opwarmtijd":
+        return
+    service.call("input_boolean", "turn_on", entity_id="input_boolean.boiler_al_verwarmd")
+    service.call("switch", "turn_off", entity_id="switch.boiler_stopcontact_1")
+
+
+@time_trigger("cron(0 16 * * 3-7)")
+async def _forced_1600():
+    if state.get("binary_sensor.bewoond") != "on":
+        return
+    service.call("switch", "turn_on", entity_id="switch.boiler_stopcontact_1")
+    await task.sleep(15 * 60)
+    service.call("switch", "turn_off", entity_id="switch.boiler_stopcontact_1")
+
+
+# --------- HA start: 1x evalueren zonder edge ---------
+
+@event_trigger("homeassistant_started")
+def _ha_start(event_name=None, data=None, kwargs=None):
+    v = state.get("sensor.p1_meter_power")
+    try:
+        p1 = float(v)
+    except (TypeError, ValueError):
+        p1 = None
+
+    if p1 is None:
+        return
+
+    # eerst veilig uit (als hij aan staat en net-afname te hoog is)
+    if p1 > UIT_BIJ_NETAFNAME_W and state.get("switch.boiler_stopcontact_1") == "on" and datetime.now().time() < time(16, 0):
+        if state.get("timer.boiler_opwarmtijd") == "active":
+            service.call("timer", "pause", entity_id="timer.boiler_opwarmtijd")
+        elif state.get("timer.boiler_opwarmtijd") == "idle":
+            service.call("input_boolean", "turn_on", entity_id="input_boolean.boiler_al_verwarmd")
+        service.call("switch", "turn_off", entity_id="switch.boiler_stopcontact_1")
+
+    # daarna eventueel aan (als er nu genoeg overschot is)
+    if p1 < AAN_BIJ_OVERSCHOT_W:
+        if state.get("binary_sensor.bewoond") != "on":
+            return
+        if state.get("input_boolean.boiler_al_verwarmd") != "off":
+            return
+        if state.get("switch.boiler_stopcontact_1") != "off":
+            return
+        if state.get("timer.boiler_opwarmtijd") != "paused":
+            return
+        service.call("switch", "turn_on", entity_id="switch.boiler_stopcontact_1")
+        service.call("timer", "start", entity_id="timer.boiler_opwarmtijd")
+
+===== /config/pyscript/gas_bewaking.py =====
+
+# /config/pyscript/gas_bewaking.py
+#
+# Elk uur:
+# - lees gasmeterstand (m³) uit sensor.gas_meter_gas
+# - bepaal of stand gestegen is t.o.v. vorige uur
+# - tel opeenvolgende uren met stijging
+# - bij 3 uren op rij stijging:
+#     * 1x persistent notification
+#     * elk uur een Sonos-bericht (achterkamer) zolang de reeks doorloopt
+
+from datetime import datetime
+
+SENSOR = "sensor.gas_meter_gas"
+EPS = 0.0001  # tolerantie voor afronding/float-ruis
+
+PLAYER = "media_player.achterkamer"
+TTS_SCRIPT = "script.tts_with_smart_volume"
+TTS_TEXT = "Ha bewoner, staat de CV nog aan? Ik zie namelijk dat er 3 achteenvolgende uren gas wordt gebruikt"
+
+_last_value = None
+_streak = 0
+_notified = False
+
+
+def _as_float(entity_id: str):
+    v = state.get(entity_id)
+    if v in (None, "unknown", "unavailable"):
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _speak():
+    # Speel bericht af via jouw bestaande Sonos TTS script
+    service.call(
+        "script",
+        "tts_with_smart_volume",
+        player=PLAYER,
+        text=TTS_TEXT,
+        volume=0.35,  # pas aan als je wilt
+    )
+
+
+@time_trigger("cron(0 * * * *)")  # elk uur op minuut 0
+def gas_check_hourly():
+    global _last_value, _streak, _notified
+
+    now = datetime.now()
+    cur = _as_float(SENSOR)
+    if cur is None:
+        log.warning("[gas_bewaking] %s: sensor heeft geen geldige waarde (%s)", now, state.get(SENSOR))
+        return
+
+    # Eerste run: alleen initialiseren
+    if _last_value is None:
+        _last_value = cur
+        _streak = 0
+        _notified = False
+        log.info("[gas_bewaking] %s: init last_value=%.5f", now, cur)
+        return
+
+    delta = cur - _last_value
+    increased = delta > EPS
+
+    if increased:
+        _streak += 1
+        log.info("[gas_bewaking] %s: gas gestegen (Δ=%.5f m³), streak=%d", now, delta, _streak)
+    else:
+        # reeks breekt -> reset en notificatie opnieuw toestaan
+        if _streak != 0 or _notified:
+            log.info("[gas_bewaking] %s: geen stijging (Δ=%.5f m³), reset streak", now, delta)
+        _streak = 0
+        _notified = False
+
+    # Bewaar huidige stand voor volgende uur
+    _last_value = cur
+
+    # Bij 4+ achtereenvolgende uren stijging:
+    # - 1x persistent notification (per streak)
+    # - ELK uur Sonos bericht zolang streak >= 3
+    if _streak >= 3:
+        if not _notified:
+            service.call(
+                "notify",
+                "mobile_app_iphone_13_arnaud",
+                title="Gasbewaking",
+                message="Staat de CV nog aan? Ik zie namelijk dat er 3 achteenvolgende uren gas wordt gebruikt",
+            )
+            _notified = True
+
+        # elk uur herhalen zolang de reeks doorloopt
+        _speak()
+
+===== /config/pyscript/hal_verlichting.py =====
+
+# /config/pyscript/hal_verlichting.py
+
+from datetime import datetime, time
+
+MINUTEN = 15
+_task = None
+_token = 0
+
+
+def _start_timer():
+    global _task, _token
+    _token += 1
+    my = _token
+
+    if _task is not None:
+        try:
+            task.cancel(_task)
+        except Exception:
+            pass
+        _task = None
+
+    async def _run():
+        await task.sleep(MINUTEN * 60)
+        if my != _token:
+            return
+        if state.get("light.verlichting_hal") == "on":
+            service.call("light", "turn_off", entity_id="light.verlichting_hal")
+
+    _task = task.create(_run())
+
+
+def _activity():
+    global _task, _token
+
+    if state.get("binary_sensor.donker_buiten") != "on":
+        return
+
+    if state.get("light.verlichting_hal") != "on":
+        service.call("light", "turn_on", entity_id="light.verlichting_hal")
+
+    # invalideer alle oudere timers (ook als cancel faalt)
+    _token += 1
+
+    if _task is not None:
+        try:
+            task.cancel(_task)
+        except Exception:
+            pass
+        _task = None
+
+
+@state_trigger(
+    "binary_sensor.sensor_hal == 'on' or "
+    "binary_sensor.voordeur == 'on' or "
+    "binary_sensor.voorkamerdeur == 'on'"
+)
+def _hal_deuren():
+    _activity()
+
+
+@state_trigger("binary_sensor.overloop4in1 == 'on'")
+def _overloop():
+    t = datetime.now().time()
+    if not (time(7, 0) <= t <= time(23, 59, 59)):
+        return
+    _activity()
+
+
+@state_trigger(
+    "binary_sensor.sensor_hal == 'off' or "
+    "binary_sensor.voordeur == 'off' or "
+    "binary_sensor.voorkamerdeur == 'off' or "
+    "binary_sensor.overloop4in1 == 'off'"
+)
+def _off_events_start_timer():
+    # Alleen timer starten als het licht aan staat; uit gebeurt na MINUTEN zonder nieuwe 'on'
+    if state.get("light.verlichting_hal") == "on":
+        _start_timer()
+
+===== /config/pyscript/kachel_werkkamer.py =====
+
+# /config/pyscript/kachel_werkkamer_auto_uit.py
+
+@state_trigger("binary_sensor.arnaud_thuis == 'off'")
+def kachel_werkkamer_uit_als_arnaud_vertrekt():
+    if state.get("switch.kachel_werkkamer_stopcontact_1") != "on":
+        return
+
+    service.call("switch", "turn_off", entity_id="switch.kachel_werkkamer_stopcontact_1")
+
+    service.call(
+        "notify",
+        "mobile_app_iphone_13_arnaud",
+        title="Kachel werkkamer",
+        message="Arnaud is niet thuis: kachel werkkamer uitgezet.",
+    )
+
+    log.warning("[kachel_werkkamer] Arnaud niet thuis -> kachel uitgezet + pushmelding")
+
+===== /config/pyscript/kerstverlichting_achtertuin.py =====
+
+# /config/pyscript/kerstverlichting.py
+#
+# - Schedule aan/uit -> kerstverlichting aan/uit
+# - Achterdeur open (alleen als zon onder & lamp uit):
+#   5 min aan, daarna weer uit (reset bij nieuwe deur-open)
+
+_task = None
+_token = 0
+
+
+@state_trigger("schedule.schedule_kerstverlichting_schema == 'on' or schedule.schedule_kerstverlichting_schema == 'off'")
+def _schema():
+    service.call(
+        "light",
+        "turn_on" if state.get("schedule.schedule_kerstverlichting_schema") == "on" else "turn_off",
+        entity_id="light.kerstverlichting",
+    )
+
+
+@state_trigger("binary_sensor.contact_sensor_deur == 'on'")
+def _deur():
+    global _task, _token
+
+    if state.get("sun.sun") != "below_horizon":
+        return
+
+    # Alleen starten als hij nu uit staat (zoals je oorspronkelijke wens)
+    if state.get("light.kerstverlichting") != "off":
+        return
+
+    service.call("light", "turn_on", entity_id="light.kerstverlichting")
+
+    # reset / invalideer oude timers
+    _token += 1
+    my = _token
+
+    if _task is not None:
+        try:
+            task.cancel(_task)
+        except Exception:
+            pass
+        _task = None
+
+    async def _run():
+        await task.sleep(5 * 60)
+        if my != _token:
+            return
+        service.call("light", "turn_off", entity_id="light.kerstverlichting")
+
+    _task = task.create(_run())
+
+===== /config/pyscript/keukenverlichting.py =====
+
+# /config/pyscript/keukenverlichting.py
+#
+# - Motion on + donker buiten -> aan
+# - Motion off start timer (15 min); geen directe uit
+# - Na 15 min: alleen uit als motion nog steeds off
+# - Token-guard: oude timers mogen nooit "spook-uit" doen
+
+OFF_DELAY = 15 * 60
+_task = None
+_token = 0
+
+
+def _start_timer():
+    global _task, _token
+    _token += 1
+    my = _token
+
+    if _task is not None:
+        try:
+            task.cancel(_task)
+        except Exception:
+            pass
+        _task = None
+
+    async def _run():
+        await task.sleep(OFF_DELAY)
+        if my != _token:
+            return
+        if state.get("binary_sensor.woonkamer4in1") == "off" and state.get("switch.keukenverlichting") == "on":
+            service.call("switch", "turn_off", entity_id="switch.keukenverlichting")
+
+    _task = task.create(_run())
+
+
+@state_trigger("binary_sensor.woonkamer4in1 == 'on'")
+def _on():
+    global _task, _token
+    if state.get("binary_sensor.donker_buiten") != "on":
+        return
+
+    service.call("switch", "turn_on", entity_id="switch.keukenverlichting")
+
+    # maak alle bestaande timers ongeldig + cancel de huidige task
+    _token += 1
+    if _task is not None:
+        try:
+            task.cancel(_task)
+        except Exception:
+            pass
+        _task = None
+
+
+@state_trigger("binary_sensor.woonkamer4in1 == 'off'")
+def _off():
+    if state.get("switch.keukenverlichting") == "on":
+        _start_timer()
+
+===== /config/pyscript/kleurenverlichting_voortuin.py =====
+
+# /config/pyscript/kleurentuinverlichting.py
+#
+# Kleurentuinverlichting:
+# - Volgt exact het schedule (aan bij on, uit bij off)
+
+@state_trigger(
+    "schedule.kleurentuinverlichting_schema == 'on' or "
+    "schedule.kleurentuinverlichting_schema == 'off'"
+)
+def _schema():
+    service.call(
+        "switch",
+        "turn_on" if state.get("schedule.kleurentuinverlichting_schema") == "on" else "turn_off",
+        entity_id="switch.kleurentuinverlichting",
+    )
+
+===== /config/pyscript/lamp_eettafel.py =====
+
+# /config/pyscript/eetkamertafel_licht.py
+#
+# Beweging of lamp-aan -> zet eetkamertafellamp op dagdeel-instellingen
+
+from datetime import datetime, time
+
+@state_trigger("binary_sensor.woonkamer4in1 == 'on' or light.lamp_eetkamertafel == 'on'")
+def _run():
+    t = datetime.now().time()
+
+    if time(6, 0) <= t < time(16, 0):
+        service.call("light", "turn_on", entity_id="light.lamp_eetkamertafel", brightness_pct=100, color_temp_kelvin=5000)
+    elif time(16, 0) <= t < time(20, 0):
+        service.call("light", "turn_on", entity_id="light.lamp_eetkamertafel", brightness_pct=50, color_temp_kelvin=2250)
+    elif time(20, 0) <= t <= time(23, 59, 59):
+        service.call("light", "turn_on", entity_id="light.lamp_eetkamertafel", brightness_pct=20, color_temp_kelvin=2100)
+
+===== /config/pyscript/lamp_voorkamer.py =====
+
+# /config/pyscript/lamp_voorkamer.py
+#
+# Regels:
+# - NIET BEWOOND: in de avond 1 uur na zonsondergang t/m 22:40 lamp aan
+# - BEWOOND: lamp voorkamer volgt lamp_eetkamertafel (aan/uit)
+# - Extra: bij beweging woonkamer4in1 (alleen bewoond) synchroniseren we direct
+#
+# Entities:
+# - switch.stekker_lamp_voorkamer
+# - binary_sensor.bewoond
+# - light.lamp_eetkamertafel
+# - binary_sensor.woonkamer4in1  (beweging)
+
+from datetime import datetime, time
+
+# Zet de voorkamerlamp alleen als de gewenste status afwijkt
+def _set(on):
+    cur = state.get("switch.stekker_lamp_voorkamer")
+    if on and cur != "on":
+        service.call("switch", "turn_on", entity_id="switch.stekker_lamp_voorkamer")
+    elif (not on) and cur != "off":
+        service.call("switch", "turn_off", entity_id="switch.stekker_lamp_voorkamer")
+
+# Reageert op wisselen tussen bewoond / niet bewoond
+@state_trigger("binary_sensor.bewoond == 'on' or binary_sensor.bewoond == 'off'")
+def bewoond_change():
+    if datetime.now().time() >= time(22, 40):
+        _set(False)
+    elif state.get("binary_sensor.bewoond") == "on":
+        _set(state.get("light.lamp_eetkamertafel") == "on")
+    else:
+        _set(False)
+
+# Houdt voorkamerlamp gelijk aan eetkamertafel als je daar schakelt
+@state_trigger("light.lamp_eetkamertafel")
+def eetkamertafel_any_change():
+    if datetime.now().time() >= time(22, 40):
+        _set(False)
+    elif state.get("binary_sensor.bewoond") == "on":
+        _set(state.get("light.lamp_eetkamertafel") == "on")
+
+# Extra synchronisatie: bij beweging checken we opnieuw de eetkamertafel-lamp
+@state_trigger("binary_sensor.woonkamer4in1 == 'on'")
+def motion_sync():
+    if datetime.now().time() >= time(22, 40):
+        _set(False)
+    elif state.get("binary_sensor.bewoond") == "on":
+        _set(state.get("light.lamp_eetkamertafel") == "on")
+
+# Niet bewoond: start avondverlichting exact 1 uur na zonsondergang
+@time_trigger("sunset + 01:00")
+def t_sunset_plus1():
+    if state.get("binary_sensor.bewoond") == "off" and datetime.now().time() < time(22, 40):
+        _set(True)
+
+# Altijd om 22:40 lamp uit (hard cutoff)
+@time_trigger("cron(40 22 * * *)")
+def t_cutoff():
+    _set(False)
+
+# Synchronisatie bij herstart van Home Assistant / Pyscript
+@time_trigger("startup")
+def t_startup():
+    if datetime.now().time() >= time(22, 40):
+        _set(False)
+    elif state.get("binary_sensor.bewoond") == "on":
+        _set(state.get("light.lamp_eetkamertafel") == "on")
+    else:
+        _set(False)
+
+===== /config/pyscript/testmelding.py =====
+
+# /config/pyscript/testmelding.py
+# Test: maak een persistent notification aan
+
+@service
+def test_melding():
+    """Handmatig aanroepen: pyscript.test_melding"""
+    service.call(
+        "notify",
+        "mobile_app_iphone_13_arnaud",
+        title="Testmelding",
+        message="Dit is een pushmelding op je iPhone via Home Assistant.",
+    )
+
+===== /config/pyscript/test.py =====
+
+# /config/pyscript/test.py
+#
+# Testscript:
+# - Elke 5 minuten
+# - Stuurt een melding met tekst: "py test"
+
+# ------------------------------------------------------------
+# CRON UITLEG (pyscript / Home Assistant)
+#
+# Syntax:
+#   cron(minuut uur dag-van-maand maand dag-van-week)
+#
+# Betekenis per veld:
+#   minuut        0–59
+#   uur           0–23
+#   dag-van-maand 1–31
+#   maand         1–12
+#   dag-van-week  0–6  (0 = maandag, 6 = zondag)
+#
+# Speciale tekens:
+#   *      = elke mogelijke waarde
+#   */5    = elke 5 eenheden
+#   0,30   = meerdere vaste waarden
+#
+# Voorbeelden:
+#   cron(0 7 * * *)        → elke dag om 07:00
+#   cron(*/5 * * * *)      → elke 5 minuten
+#   cron(0 0 * * 1)        → elke maandag om 00:00
+#   cron(30 22 * * 5)      → elke vrijdag om 22:30
+#
+# In dit script:
+#   cron(*/5 * * * *)      → elke 5 minuten
+# ------------------------------------------------------------
+# @time_trigger("cron(*/2 * * * *)")
+# def py_test_message():
+#     service.call(
+#         "persistent_notification",
+#         "create",
+#         title="Pyscript test",
+#         message="py test via cron jajaja",
+#     )
+
+# @service
+# def py_test_now():
+#     service.call(
+#         "persistent_notification",
+#         "create",
+#         title="Pyscript test",
+#         message="py test",
+#     )
+
+===== /config/pyscript/tv.py =====
+
+# /config/pyscript/tv.py
+#
+# - Dagelijks 00:25: TV-stopcontact uit (behalve 1 januari)
+# - Beweging woonkamer: TV-stopcontact aan binnen tijdvensters, alleen als nu uit
+
+from datetime import datetime, time
+
+_windows = {
+    "sat": [("07:00", "12:00")],
+    "sun": [("07:00", "11:00")],
+    "thu": [("12:00", "18:00")],
+    "fri": [("13:00", "17:00")],
+}
+_days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+
+def _allowed(now: datetime) -> bool:
+    d = _days[now.weekday()]
+    t = now.time()
+    for a, b in _windows.get(d, []):
+        if time.fromisoformat(a) <= t < time.fromisoformat(b):
+            return True
+    return False
+
+
+@time_trigger("cron(25 0 * * *)")
+def _off_0025():
+    now = datetime.now()
+    if now.strftime("%m-%d") == "01-01":
+        return
+    service.call("switch", "turn_off", entity_id="switch.tv_stopcontact_1")
+
+
+@state_trigger("binary_sensor.woonkamer4in1 == 'on'")
+def _on_motion():
+    now = datetime.now()
+    if not _allowed(now):
+        return
+    if state.get("switch.tv_stopcontact_1") != "off":
+        return
+    service.call("switch", "turn_on", entity_id="switch.tv_stopcontact_1")
+
+===== /config/pyscript/voordeur_verlichting.py =====
+
+# /config/pyscript/voordeur_verlichting.py
+#
+# - AAN bij activiteit (hal / voordeur / voorkamerdeur) als donker buiten
+# - UIT na 15 min zonder activiteit
+# - Robuust tegen:
+#   * spanningsloze lamp (unavailable)
+#   * oude timers (token-guard)
+
+MINUTEN = 15
+_task = None
+_token = 0
+
+
+def _light_state_ok():
+    return state.get("light.lamp_voordeur") in ("on", "off")
+
+
+def _start_timer():
+    global _task, _token
+    _token += 1
+    my = _token
+
+    if _task is not None:
+        try:
+            task.cancel(_task)
+        except Exception:
+            pass
+        _task = None
+
+    async def _run():
+        await task.sleep(MINUTEN * 60)
+        if my != _token:
+            return
+        if not _light_state_ok():
+            return
+        if state.get("light.lamp_voordeur") == "on":
+            service.call("light", "turn_off", entity_id="light.lamp_voordeur")
+
+    _task = task.create(_run())
+
+
+@state_trigger(
+    "binary_sensor.sensor_hal == 'on' or "
+    "binary_sensor.voordeur == 'on' or "
+    "binary_sensor.voorkamerdeur == 'on'"
+)
+def _activiteit():
+    global _task, _token
+
+    if state.get("binary_sensor.donker_buiten") != "on":
+        return
+
+    if not _light_state_ok():
+        return
+
+    if state.get("light.lamp_voordeur") != "on":
+        service.call("light", "turn_on", entity_id="light.lamp_voordeur")
+
+    _token += 1
+    if _task is not None:
+        try:
+            task.cancel(_task)
+        except Exception:
+            pass
+        _task = None
+
+    _start_timer()
+
+===== /config/pyscript/weerbericht_utrecht.py =====
+
+# /config/pyscript/knmi_weerbericht_utrecht.py
+#
+# - Do/vr 07:25 en za/zo 10:00: KNMI weerbericht Utrecht voorlezen
+# - Eerst update_entity
+# - Wacht max 10s op .full_text (poll elke 0.5s)
+# - Fallback tekst
+# - TTS via script.tts_with_smart_volume
+
+from datetime import datetime
+
+@time_trigger("cron(25 7 * * 3,4)")
+@time_trigger("cron(0 10 * * 5,6)")
+async def _knmi():
+    service.call("homeassistant", "update_entity", entity_id="sensor.knmi_data_utrecht")
+
+    text = None
+    deadline = datetime.now().timestamp() + 10
+
+    while datetime.now().timestamp() < deadline:
+        t = state.get("sensor.knmi_weerbericht_utrecht.full_text")
+        if t not in (None, "", "unknown", "unavailable"):
+            text = t
+            break
+        await task.sleep(0.5)
+
+    if text in (None, "", "unknown", "unavailable"):
+        text = "Het weerbericht voor Utrecht is nu niet beschikbaar."
+
+    service.call(
+        "script",
+        "tts_with_smart_volume",
+        player="media_player.achterkamer",
+        text=f"Goedemorgen, het weerbericht voor Utrecht: {text}",
+        volume=0.35,
+    )
+
+===== /config/pyscript/woonkamer_klimaat.py =====
+
+# /config/pyscript/woonkamer_klimaat.py
+#
+# - Bij beweging: melding via TTS, max 1x/uur (timer cooldown)
+# - Alleen als te vochtig of te droog
+
+@state_trigger("binary_sensor.woonkamer4in1 == 'on'")
+def _klimaat_melding():
+    if state.get("timer.woonkamer_klimaat_melding_cooldown") != "idle":
+        return
+
+    humid = (state.get("binary_sensor.woonkamer_klimaat_te_vochtig") == "on")
+    dry = (state.get("binary_sensor.woonkamer_klimaat_te_droog") == "on")
+    if not (humid or dry):
+        return
+
+    try:
+        t = float(state.get("sensor.woonkamerklimaat_temperatuur"))
+    except (TypeError, ValueError):
+        t = 0.0
+
+    try:
+        rh = float(state.get("sensor.woonkamerklimaat_luchtvochtigheid"))
+    except (TypeError, ValueError):
+        rh = 0.0
+
+    msg = (
+        "Let op. De lucht is te vochtig in de woonkamer. "
+        f"Temperatuur {t:.1f} graden, luchtvochtigheid {rh:.0f} procent. "
+        "Advies: ventileer of verwarm kort om schimmel te voorkomen."
+        if humid else
+        "Let op. De lucht is te droog in de woonkamer. "
+        f"Temperatuur {t:.1f} graden, luchtvochtigheid {rh:.0f} procent. "
+        "Advies: eventueel tijdelijk bevochtigen."
+    )
+
+    service.call("script", "tts_with_smart_volume", message=msg)
+    service.call("timer", "start", entity_id="timer.woonkamer_klimaat_melding_cooldown")

@@ -33,5 +33,11 @@ def _klimaat_melding():
         "Advies: eventueel tijdelijk bevochtigen."
     )
 
-    service.call("script", "tts_with_smart_volume", message=msg)
+    service.call(
+        "script",
+        "tts_with_smart_volume",
+        player="media_player.achterkamer",
+        text=msg,
+        volume=0.35,
+    )
     service.call("timer", "start", entity_id="timer.woonkamer_klimaat_melding_cooldown")
