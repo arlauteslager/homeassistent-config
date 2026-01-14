@@ -63,14 +63,12 @@ async def _reset_0600():
     await task.sleep(1)
     service.call("timer", "pause", entity_id="timer.boiler_opwarmtijd")
 
-
 @event_trigger("timer.finished")
-def _timer_klaar(event_name=None, data=None, kwargs=None):
-    if (data or {}).get("entity_id") != "timer.boiler_opwarmtijd":
+def _timer_klaar(**kwargs):
+    if (kwargs.get("data") or {}).get("entity_id") != "timer.boiler_opwarmtijd" and kwargs.get("entity_id") != "timer.boiler_opwarmtijd":
         return
     service.call("input_boolean", "turn_on", entity_id="input_boolean.boiler_al_verwarmd")
     service.call("switch", "turn_off", entity_id="switch.boiler_stopcontact_1")
-
 
 @time_trigger("cron(0 16 * * 3-7)")
 async def _forced_1600():

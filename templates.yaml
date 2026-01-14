@@ -251,6 +251,12 @@
           {{ (T - Td) | round(2) }}
 
   - binary_sensor:
+      - name: "Zon onder"
+        unique_id: zon_onder
+        state: >
+          {{ is_state('sun.sun', 'below_horizon') }}
+
+  - binary_sensor:
       - name: "Woonkamer klimaat te vochtig"
         state: >
           {% set T = states('sensor.woonkamer4in1_temperatuur')|float(0) %}

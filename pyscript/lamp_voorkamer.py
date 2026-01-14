@@ -48,8 +48,12 @@ def motion_sync():
         _set(state.get("light.lamp_eetkamertafel") == "on")
 
 # Niet bewoond: start avondverlichting exact 1 uur na zonsondergang
-@time_trigger("sunset + 01:00")
-def t_sunset_plus1():
+@state_trigger("binary_sensor.zon_onder == 'on'")
+async def t_sunset_plus1():
+    # vervangt alleen het tijdstip (sunset+1h)
+    await task.sleep(3600)
+
+    # rest is identiek aan je oude code
     if state.get("binary_sensor.bewoond") == "off" and datetime.now().time() < time(22, 40):
         _set(True)
 
