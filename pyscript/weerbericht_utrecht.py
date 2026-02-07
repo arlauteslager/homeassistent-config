@@ -21,7 +21,7 @@ async def _knmi():
         if t not in (None, "", "unknown", "unavailable"):
             text = t
             break
-        await task.sleep(0.5)
+        await task.sleep(5)
 
     if text in (None, "", "unknown", "unavailable"):
         text = "Het weerbericht voor Utrecht is nu niet beschikbaar."

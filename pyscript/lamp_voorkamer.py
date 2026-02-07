@@ -57,10 +57,12 @@ async def t_sunset_plus1():
     if state.get("binary_sensor.bewoond") == "off" and datetime.now().time() < time(22, 40):
         _set(True)
 
-# Altijd om 22:40 lamp uit (hard cutoff)
+# Om 22:40 lamp uit, maar alleen als NIET BEWOOND
 @time_trigger("cron(40 22 * * *)")
 def t_cutoff():
-    _set(False)
+    if state.get("binary_sensor.bewoond") == "off":
+        _set(False)
+
 
 # Synchronisatie bij herstart van Home Assistant / Pyscript
 @time_trigger("startup")

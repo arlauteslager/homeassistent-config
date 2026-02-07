@@ -30,7 +30,6 @@ def _deur():
 
     service.call("light", "turn_on", entity_id="light.kerstverlichting")
 
-    # reset / invalideer oude timers
     _token += 1
     my = _token
 
@@ -41,10 +40,10 @@ def _deur():
             pass
         _task = None
 
-    async def _run():
+    async def _run(**kwargs):
         await task.sleep(5 * 60)
         if my != _token:
             return
         service.call("light", "turn_off", entity_id="light.kerstverlichting")
 
-    _task = task.create(_run())
+    _task = task.create(_run)   # <-- FIX: geen _run()

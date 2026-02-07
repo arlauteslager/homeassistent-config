@@ -64,3 +64,10 @@ tts:
   - platform: google_translate
     language: 'nl'
     cache: true
+
+panel_iframe:
+  developer_tools:
+    title: Ontwikkelaarstools
+    icon: mdi:tools
+    url: /developer-tools
+

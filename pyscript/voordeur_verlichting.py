@@ -1,42 +1,15 @@
 # /config/pyscript/voordeur_verlichting.py
 #
 # - AAN bij activiteit (hal / voordeur / voorkamerdeur) als donker buiten
-# - UIT na 15 min zonder activiteit
-# - Robuust tegen:
-#   * spanningsloze lamp (unavailable)
-#   * oude timers (token-guard)
+# - Timer (15 min) wordt bij elke activiteit opnieuw gestart
+# - UIT bij timer.finished
+# - Robuust tegen unavailable
 
 MINUTEN = 15
-_task = None
-_token = 0
 
 
 def _light_state_ok():
     return state.get("light.lamp_voordeur") in ("on", "off")
-
-
-def _start_timer():
-    global _task, _token
-    _token += 1
-    my = _token
-
-    if _task is not None:
-        try:
-            task.cancel(_task)
-        except Exception:
-            pass
-        _task = None
-
-    async def _run():
-        await task.sleep(MINUTEN * 60)
-        if my != _token:
-            return
-        if not _light_state_ok():
-            return
-        if state.get("light.lamp_voordeur") == "on":
-            service.call("light", "turn_off", entity_id="light.lamp_voordeur")
-
-    _task = task.create(_run())
 
 
 @state_trigger(
@@ -45,23 +18,25 @@ def _start_timer():
     "binary_sensor.voorkamerdeur == 'on'"
 )
 def _activiteit():
-    global _task, _token
-
     if state.get("binary_sensor.donker_buiten") != "on":
         return
-
     if not _light_state_ok():
         return
 
     if state.get("light.lamp_voordeur") != "on":
         service.call("light", "turn_on", entity_id="light.lamp_voordeur")
 
-    _token += 1
-    if _task is not None:
-        try:
-            task.cancel(_task)
-        except Exception:
-            pass
-        _task = None
+    service.call("timer", "start", entity_id="timer.voordeur_verlichting_off", duration=f"00:{MINUTEN:02d}:00")
 
-    _start_timer()
+
+@event_trigger("timer.finished")
+def _timer_klaar(**kwargs):
+    data = kwargs.get("data") or {}
+    entity_id = kwargs.get("entity_id") or data.get("entity_id")
+    if entity_id != "timer.voordeur_verlichting_off":
+        return
+
+    if not _light_state_ok():
+        return
+    if state.get("light.lamp_voordeur") == "on":
+        service.call("light", "turn_off", entity_id="light.lamp_voordeur")
