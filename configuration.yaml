@@ -5,7 +5,7 @@ default_config:
 logger:
   default: info
   logs:
-    custom_components.pyscript: warning
+    custom_components.pyscript: info
 # logger:
 #   default: warning
 #   logs:
@@ -65,9 +65,9 @@ tts:
     language: 'nl'
     cache: true
 
-panel_iframe:
-  developer_tools:
-    title: Ontwikkelaarstools
-    icon: mdi:tools
-    url: /developer-tools
+# panel_iframe:
+#   developer_tools:
+#     title: Ontwikkelaarstools
+#     icon: mdi:tools
+#     url: /developer-tools
 

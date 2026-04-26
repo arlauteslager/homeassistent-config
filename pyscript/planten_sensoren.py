@@ -1,49 +1,51 @@
-# pyscript/planten_water.py
+# pyscript/planten_sensoren.py
 
-from datetime import datetime
+MOBILE = "mobile_app_iphone_13_arnaud"
 
-PLANTS = [
-    {"name": "Watermunt", "entity": "sensor.watermunt_luchtvochtigheid", "thr": 30},
-    {"name": "Pannenkoekenplant", "entity": "sensor.pannekoekenplant_luchtvochtigheid", "thr": 10},
-    # Voeg later planten toe:
-    # {"name": "Basilicum", "entity": "sensor.basilicum_grondvocht", "thr": 25},
-]
 
-NOTIFY = "notify.mobile_app_iphone_13_arnaud"  # <-- aanpassen
-AT = "20:00:00"  # dagelijkse reminder tijd
-
-def _as_float(s):
+def _to_float(x):
+    if x in (None, "unknown", "unavailable"):
+        return None
     try:
-        return float(s)
+        return float(str(x).replace("%", "").strip())
     except Exception:
         return None
 
-def _msg(p, v):
-    return f"{p['name']} is te droog ({v:.1f}% < {p['thr']}%). Tijd om water te geven."
 
-def _notify(title, message):
-    # notify.* services hebben doorgaans title/message
-    service.call(NOTIFY, title=title, message=message)
-
-@time_trigger(f"cron({AT.split(':')[1]} {AT.split(':')[0]} * * *)")
+@time_trigger(f"cron( 0 19 * * *)")
 def planten_daily_reminder():
     msgs = []
-    for p in PLANTS:
-        v = _as_float(state.get(p["entity"]))
-        if v is not None and v < p["thr"]:
-            msgs.append(_msg(p, v))
-    if msgs:
-        _notify("🌿 Plant water geven", "\n".join(msgs))
 
-# Directe melding als een plant onder de drempel komt
-@state_trigger("sensor.watermunt_luchtvochtigheid")
-def watermunt_direct():
-    v = _as_float(state.get("sensor.watermunt_luchtvochtigheid"))
+    v = _to_float(state.get("sensor.watermunt_luchtvochtigheid"))
+    if v is not None and v < 40:
+        msgs.append(f"Watermunt is te droog ({v:.1f}% < 40%). Tijd om water te geven.")
+
+    v = _to_float(state.get("sensor.pannekoekenplant_luchtvochtigheid"))
+    if v is not None and v < 25:
+        msgs.append(f"Pannenkoekenplant is te droog ({v:.1f}% < 25%). Tijd om water te geven.")
+
+    v = _to_float(state.get("sensor.adoptieplant_luchtvochtigheid"))
     if v is not None and v < 30:
-        _notify("🌿 Plant water geven", _msg({"name":"Watermunt","thr":30}, v))
+        msgs.append(f"adoptieplant is te droog ({v:.1f}% < 30%). Tijd om water te geven.")
 
-@state_trigger("sensor.pannekoekenplant_luchtvochtigheid")
-def pannekoek_direct():
-    v = _as_float(state.get("sensor.pannekoekenplant_luchtvochtigheid"))
-    if v is not None and v < 10:
-        _notify("🌿 Plant water geven", _msg({"name":"Pannenkoekenplant","thr":10}, v))
+    v = _to_float(state.get("sensor.duin_watermunt_luchtvochtigheid"))
+    if v is not None and v < 40:
+        msgs.append(f"duin-watermuntplant is te droog ({v:.1f}% < 40%). Tijd om water te geven.")
+    if msgs:
+        service.call("notify", MOBILE, title="🌿 Plant water geven", message="\n".join(msgs))
+
+
+# @state_trigger("sensor.watermunt_luchtvochtigheid")
+# def watermunt_direct():
+#     v = _to_float(state.get("sensor.watermunt_luchtvochtigheid"))
+#     if v is not None and v < 30:
+#         service.call("notify", MOBILE, title="🌿 Plant water geven",
+#             message=f"Watermunt is te droog ({v:.1f}% < 30%). Tijd om water te geven.")
+
+
+# @state_trigger("sensor.pannekoekenplant_luchtvochtigheid")
+# def pannenkoekenplant_direct():
+#     v = _to_float(state.get("sensor.pannekoekenplant_luchtvochtigheid"))
+#     if v is not None and v < 10:
+#         service.call("notify", MOBILE, title="🌿 Plant water geven",
+#             message=f"Pannenkoekenplant is te droog ({v:.1f}% < 10%). Tijd om water te geven.")

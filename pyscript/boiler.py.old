@@ -1,23 +1,72 @@
-# /config/pyscript/boiler_regeling.py
-#
-# - Aan bij overschot: P1 < -1100 (edge) + bewoond + dagbudget nog niet op + timer staat paused + boiler is uit
-# - Uit bij teveel net-afname: P1 > 1200 (edge) vóór 16:00 + boiler is aan
-# - Max 30 min/dag via timer (reset 06:00)
-# - Geforceerde run wo–zo 16:00 (15 min)
-# - Bij HA-start 1x her-evalueren (zonder logspam)
+# /config/pyscript/boiler.py
 
 from datetime import datetime, time
 
-AAN_BIJ_OVERSCHOT_W = -1100
-UIT_BIJ_NETAFNAME_W = 1200
 DAG_TIMER = "00:30:00"
 
-# --------- Edge triggers (geen spam) ---------
+
+def pv_zonnig_vermogen():
+    maart_ref = 2050
+    schaal = maart_ref / 2150
+
+    nu = datetime.now()
+    maand = int(nu.month)
+    dag = int(nu.day)
+
+    basis_waardes = {
+        1: 900,
+        2: 1500,
+        3: 1700,
+        4: 1900,
+        5: 2000,
+        6: 2000,
+        7: 2000,
+        8: 2000,
+        9: 1900,
+        10: 1400,
+        11: 1000,
+        12: 800,
+        # 1: 1150,
+        # 2: 1600,
+        # 3: 2150,
+        # 4: 2500,
+        # 5: 2700,
+        # 6: 2750,
+        # 7: 2600,
+        # 8: 2350,
+        # 9: 2000,
+        # 10: 1500,
+        # 11: 1000,
+        # 12: 800,
+    }
+
+    begin = round(basis_waardes[maand] * schaal)
+    eind = round(basis_waardes[1 if maand == 12 else maand + 1] * schaal)
+
+    if maand in [1, 3, 5, 7, 8, 10, 12]:
+        dagen_in_maand = 31
+    elif maand in [4, 6, 9, 11]:
+        dagen_in_maand = 30
+    else:
+        dagen_in_maand = 28
+
+    fractie = (dag - 1) / dagen_in_maand
+    return round((begin + ((eind - begin) * fractie)))
+
+
+def aan_bij_overschot_w():
+    return -pv_zonnig_vermogen()
+
+
+def uit_bij_netafname_w():
+    return -pv_zonnig_vermogen() + 2300
+
 
 @state_trigger(
-    f"float(sensor.p1_meter_power) < {AAN_BIJ_OVERSCHOT_W} and "
-    f"sensor.p1_meter_power.old is not None and "
-    f"float(sensor.p1_meter_power.old) >= {AAN_BIJ_OVERSCHOT_W}"
+    "sensor.p1_meter_power not in ['unknown', 'unavailable', None] and "
+    "sensor.p1_meter_power.old not in ['unknown', 'unavailable', None] and "
+    "float(sensor.p1_meter_power) < aan_bij_overschot_w() and "
+    "float(sensor.p1_meter_power.old) >= aan_bij_overschot_w()"
 )
 def _aan_edge():
     if state.get("binary_sensor.bewoond") != "on":
@@ -34,14 +83,15 @@ def _aan_edge():
 
 
 @state_trigger(
-    f"float(sensor.p1_meter_power) > {UIT_BIJ_NETAFNAME_W} and "
-    f"sensor.p1_meter_power.old is not None and "
-    f"float(sensor.p1_meter_power.old) <= {UIT_BIJ_NETAFNAME_W}"
+    "sensor.p1_meter_power not in ['unknown', 'unavailable', None] and "
+    "sensor.p1_meter_power.old not in ['unknown', 'unavailable', None] and "
+    "float(sensor.p1_meter_power) > uit_bij_netafname_w() and "
+    "float(sensor.p1_meter_power.old) <= uit_bij_netafname_w()"
 )
 def _uit_edge():
     if state.get("switch.boiler_stopcontact_1") != "on":
         return
-    if datetime.now().time() >= time(16, 0):
+    if datetime.now().time() >= time(15, 0):
         return
 
     if state.get("timer.boiler_opwarmtijd") == "active":
@@ -52,8 +102,6 @@ def _uit_edge():
     service.call("switch", "turn_off", entity_id="switch.boiler_stopcontact_1")
 
 
-# --------- Reset / timers ---------
-
 @time_trigger("cron(0 6 * * *)")
 async def _reset_0600():
     service.call("switch", "turn_off", entity_id="switch.boiler_stopcontact_1")
@@ -63,23 +111,25 @@ async def _reset_0600():
     await task.sleep(1)
     service.call("timer", "pause", entity_id="timer.boiler_opwarmtijd")
 
+
 @event_trigger("timer.finished")
 def _timer_klaar(**kwargs):
     if (kwargs.get("data") or {}).get("entity_id") != "timer.boiler_opwarmtijd" and kwargs.get("entity_id") != "timer.boiler_opwarmtijd":
         return
+
     service.call("input_boolean", "turn_on", entity_id="input_boolean.boiler_al_verwarmd")
     service.call("switch", "turn_off", entity_id="switch.boiler_stopcontact_1")
 
-@time_trigger("cron(0 16 * * 3-7)")
-async def _forced_1600():
+
+@time_trigger("cron(0 15 * * 3-7)")
+async def _forced_1500():
     if state.get("binary_sensor.bewoond") != "on":
         return
+
     service.call("switch", "turn_on", entity_id="switch.boiler_stopcontact_1")
     await task.sleep(15 * 60)
     service.call("switch", "turn_off", entity_id="switch.boiler_stopcontact_1")
 
-
-# --------- HA start: 1x evalueren zonder edge ---------
 
 @event_trigger("homeassistant_started")
 def _ha_start(event_name=None, data=None, kwargs=None):
@@ -87,21 +137,16 @@ def _ha_start(event_name=None, data=None, kwargs=None):
     try:
         p1 = float(v)
     except (TypeError, ValueError):
-        p1 = None
-
-    if p1 is None:
         return
 
-    # eerst veilig uit (als hij aan staat en net-afname te hoog is)
-    if p1 > UIT_BIJ_NETAFNAME_W and state.get("switch.boiler_stopcontact_1") == "on" and datetime.now().time() < time(16, 0):
+    if p1 > uit_bij_netafname_w() and state.get("switch.boiler_stopcontact_1") == "on" and datetime.now().time() < time(15, 0):
         if state.get("timer.boiler_opwarmtijd") == "active":
             service.call("timer", "pause", entity_id="timer.boiler_opwarmtijd")
         elif state.get("timer.boiler_opwarmtijd") == "idle":
             service.call("input_boolean", "turn_on", entity_id="input_boolean.boiler_al_verwarmd")
         service.call("switch", "turn_off", entity_id="switch.boiler_stopcontact_1")
 
-    # daarna eventueel aan (als er nu genoeg overschot is)
-    if p1 < AAN_BIJ_OVERSCHOT_W:
+    if p1 < aan_bij_overschot_w():
         if state.get("binary_sensor.bewoond") != "on":
             return
         if state.get("input_boolean.boiler_al_verwarmd") != "off":
@@ -110,5 +155,20 @@ def _ha_start(event_name=None, data=None, kwargs=None):
             return
         if state.get("timer.boiler_opwarmtijd") != "paused":
             return
+
         service.call("switch", "turn_on", entity_id="switch.boiler_stopcontact_1")
         service.call("timer", "start", entity_id="timer.boiler_opwarmtijd")
+
+
+@time_trigger("startup", "cron(0 * * * *)")
+def update_pv_zonnig_vermogen_sensor():
+    waarde = pv_zonnig_vermogen()
+    state.set(
+        "sensor.pv_zonnig_vermogen_schatting",
+        value=waarde,
+        new_attributes={
+            "friendly_name": "PV zonnig vermogen schatting",
+            "unit_of_measurement": "W",
+            "maart_ref": 2050,
+        },
+    )
